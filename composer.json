@@ -1,0 +1,43 @@
+{
+    "name": "kalimeromk/rssfeed",
+    "description": "A description for rssfeed.",
+    "type": "package",
+    "license": "MIT",
+    "keywords": [
+        "laravel"
+    ],
+    "authors": [
+        {
+            "name": "Zorab Shefot Bogoevski",
+            "email": "zbogoevski@gmail.com"
+        }
+    ],
+
+    "autoload": {
+        "psr-4": {
+            "Kalimeromk\\Rssfeed\\": "./src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kalimeromk\\Rssfeed\\Tests\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Kalimeromk\\Rssfeed\\RssfeedServiceProvider"
+            ]
+        }
+    },
+    "require": {
+        "php": ">=7.4",
+        "kalimeromk/update-htmldom": "^1.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^6.0"
+    }
+}
