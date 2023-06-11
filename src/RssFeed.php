@@ -14,6 +14,9 @@ use SimpleXMLElement;
 class RssFeed
 {
     /**
+     * @param  array  $feedUrls
+     * @return array
+     * @throws CantOpenFileFromUrlException
      * @throws Exception
      */
     public function parseRssFeeds(array $feedUrls): array
@@ -24,15 +27,15 @@ class RssFeed
             $xml = file_get_contents($feedUrl);
             $xmlObject = new SimpleXMLElement($xml);
 
-            $channelTitle = $xmlObject->channel->title;
-            $channelLink = $xmlObject->channel->link;
-            $channelDescription = $xmlObject->channel->description;
+            $channelTitle = (string) $xmlObject->channel->title;
+            $channelLink = (string) $xmlObject->channel->link;
+            $channelDescription = (string) $xmlObject->channel->description;
 
             foreach ($xmlObject->channel->item as $item) {
-                $itemTitle = $item->title;
-                $itemLink = $item->link;
-                $itemPubDate = $item->pubDate;
-                $itemDescription = $item->description;
+                $itemTitle = (string) $item->title;
+                $itemLink = (string) $item->link;
+                $itemPubDate = (string) $item->pubDate;
+                $itemDescription = (string) $item->description;
 
                 // Save the image to storage
                 $imagePath = $this->saveImageToStorage($itemDescription);
@@ -59,9 +62,11 @@ class RssFeed
     }
 
     /**
+     * @param  string  $itemDescription
+     * @return string
      * @throws CantOpenFileFromUrlException
      */
-    public function saveImageToStorage($itemDescription): string
+    public function saveImageToStorage(string $itemDescription): string
     {
         $find_img = $this->getImageWithSizeGreaterThan($itemDescription);
         $file = UrlUploadedFile::createFromUrl($find_img);
@@ -70,20 +75,14 @@ class RssFeed
         return $imageName;
     }
 
-    public function retrieveFullContent($postLink): bool|string
+    public function retrieveFullContent(string $postLink): bool|string
     {
         // Fetch the HTML content of the post URL
         $html = file_get_contents($postLink);
 
-        // Convert the HTML content to UTF-8 if needed
-        if (!mb_check_encoding($html, 'UTF-8')) {
-            $html = mb_convert_encoding($html, 'UTF-8');
-        }
-
         // Create a DOMDocument object and load the HTML content
         $dom = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html);
+        @$dom->loadHTML($html);
 
         // Create a DOMXPath object
         $xpath = new DOMXPath($dom);
@@ -110,23 +109,16 @@ class RssFeed
             }
         }
 
-        // Decode HTML entities in the retrieved full post content
-        $fullContent = html_entity_decode($fullContent, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        // Remove all HTML tags from the full post content
-        $fullContent = strip_tags($fullContent);
-
-        // Trim whitespace from the full post content
         // Return the retrieved full post content
-        return trim($fullContent);
+        return $fullContent;
     }
 
     /**
      * @param  string  $html
      * @param  int  $size
-     * @return mixed
+     * @return string|null
      */
-    public static function getImageWithSizeGreaterThan(string $html, int $size = 200): mixed
+    public static function getImageWithSizeGreaterThan(string $html, int $size = 200): ?string
     {
         ini_set('allow_url_fopen', 1);
 
@@ -147,7 +139,7 @@ class RssFeed
                 // Do nothing if image cannot be processed
             }
         }
-        return $featured_img;
-    }
 
+        return $featured_img ?: null;
+    }
 }

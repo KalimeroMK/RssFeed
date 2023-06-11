@@ -10,7 +10,7 @@ This package provides an easy way to parse RSS feeds and save them into your app
 
 ## Requirements
 
-* PHP 7.3 or higher
+* PHP 7.4 or higher
 * Laravel 8.0 or higher
 * Composer
 
