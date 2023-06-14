@@ -67,3 +67,15 @@ foreach ($feedData as $item) {
     echo 'Channel Link: ' . $item['channel_link'] . PHP_EOL;
     echo 'Channel Description: ' . $item['channel_description'] . PHP_EOL;
 }
+```
+## Jobs
+
+If you need to dispatch the RssFeed job, you can do so as follows:
+
+```php
+use Kalimeromk\Rssfeed\Jobs\RssFeedJob;
+
+$feedUrls = ['https://example.com/rss'];
+
+RssFeedJob::dispatch($feedUrls);
+```
