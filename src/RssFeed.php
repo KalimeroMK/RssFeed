@@ -6,20 +6,25 @@ use DOMDocument;
 use DOMXPath;
 use Exception;
 use Htmldom\Htmldom;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimpleXMLElement;
 
-class RssFeed
+class RssFeed implements ShouldQueue
 {
+    use Dispatchable;
+
     /**
      * @param  array  $feedUrls
+     * @param  null  $jobId
      * @return array
      * @throws CantOpenFileFromUrlException
      * @throws Exception
      */
-    public function parseRssFeeds(array $feedUrls): array
+    public function parseRssFeeds(array $feedUrls, $jobId = null): array
     {
         $parsedItems = [];
 
