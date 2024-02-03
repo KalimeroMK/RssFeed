@@ -46,7 +46,7 @@ class RssFeed implements ShouldQueue
                 $fullContent = $this->retrieveFullContent($itemLink);
 
                 // Save the image to storage
-                $images = $this->saveImageToStorage($fullContent);
+                $images = $this->saveImagesToStorage($fullContent['images']);
 
                 // Add the extracted item data to the parsedItems array
                 $parsedItems[] = [
@@ -71,15 +71,15 @@ class RssFeed implements ShouldQueue
      * @return array|bool
      * @throws CantOpenFileFromUrlException
      */
-    public function saveImageToStorage(array $images): array
+    public function saveImagesToStorage(array $images): array
     {
         $savedImageNames = [];
 
         foreach ($images as $image) {
-                $file = UrlUploadedFile::createFromUrl($image);
-                $imageName = Str::random(15) . '.' . $file->extension();
-                $file->storeAs('images', $imageName, 'public');
-                $savedImageNames[] = $imageName;
+            $file = UrlUploadedFile::createFromUrl($image);
+            $imageName = Str::random(15) . '.' . $file->extension();
+            $file->storeAs('images', $imageName, 'public');
+            $savedImageNames[] = $imageName;
 
         }
 
@@ -109,9 +109,10 @@ class RssFeed implements ShouldQueue
         // Initialize an array to hold the image URLs
         $imageUrls = [];
         $selectedContent = '';
+        $contentElementXPaths = config('rssfeed.content_element_xpaths', []);
 
         // Process each XPath query in the configuration
-        foreach ($config['content_element_xpaths'] as $xpathQuery) {
+        foreach ($contentElementXPaths as $xpathQuery) {
             $elements = $xpath->query($xpathQuery);
 
             // Check if elements were found for the current XPath query
@@ -130,7 +131,7 @@ class RssFeed implements ShouldQueue
             }
         }
 
-        // Optionally, you might want to remove <script> and <style> from $selectedContent
+        // remove <script> and <style> from $selectedContent
         $selectedContent = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', "", $selectedContent);
         $selectedContent = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', "", $selectedContent);
 
@@ -140,6 +141,11 @@ class RssFeed implements ShouldQueue
             'images' => $imageUrls, // This is an array of image URLs found in the selected content
         ];
     }
+
+
+
+
+// The cURL fetching function from previous examples
     private function fetchContentUsingCurl(string $url): bool|string
     {
         $ch = curl_init();
@@ -153,4 +159,6 @@ class RssFeed implements ShouldQueue
 
         return $httpCode === 200 ? $data : false;
     }
+
+
 }
