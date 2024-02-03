@@ -35,7 +35,6 @@
     },
     "require": {
         "php": ">=7.4",
-        "kalimeromk/update-htmldom": "^1.0"
     },
     "require-dev": {
         "orchestra/testbench": "^6.0"
