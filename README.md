@@ -78,4 +78,3 @@ use Kalimeromk\Rssfeed\Jobs\RssFeedJob;
 $feedUrls = ['https://example.com/rss'];
 
 RssFeedJob::dispatch($feedUrls);
-```
