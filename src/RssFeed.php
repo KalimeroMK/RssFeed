@@ -42,11 +42,11 @@ class RssFeed implements ShouldQueue
                 $itemPubDate = (string) $item->pubDate;
                 $itemDescription = (string) $item->description;
 
-                // Save the image to storage
-                $imagePath = $this->saveImageToStorage($itemDescription);
-
                 // Retrieve the full post content
                 $fullContent = $this->retrieveFullContent($itemLink);
+
+                // Save the image to storage
+                $images = $this->saveImageToStorage($fullContent);
 
                 // Add the extracted item data to the parsedItems array
                 $parsedItems[] = [
@@ -55,7 +55,7 @@ class RssFeed implements ShouldQueue
                     'pub_date' => $itemPubDate,
                     'description' => $itemDescription,
                     'content' => $fullContent,
-                    'image_path' => $imagePath,
+                    'image_path' => $images,
                     'channel_title' => $channelTitle,
                     'channel_link' => $channelLink,
                     'channel_description' => $channelDescription,
@@ -67,84 +67,90 @@ class RssFeed implements ShouldQueue
     }
 
     /**
-     * @param  string  $itemDescription
-     * @return string
+     * @param  array  $images
+     * @return array|bool
      * @throws CantOpenFileFromUrlException
      */
-    public function saveImageToStorage(string $itemDescription): string
+    public function saveImageToStorage(array $images): array
     {
-        $find_img = $this->getImageWithSizeGreaterThan($itemDescription);
-        $file = UrlUploadedFile::createFromUrl($find_img);
-        $imageName = Str::random(15) . '.' . $file->extension();
-        $file->storeAs('images', $imageName, 'public');
-        return $imageName;
-    }
+        $savedImageNames = [];
 
-    public function retrieveFullContent(string $postLink): bool|string
-    {
-        // Fetch the HTML content of the post URL
-        $html = file_get_contents($postLink);
+        foreach ($images as $image) {
+                $file = UrlUploadedFile::createFromUrl($image);
+                $imageName = Str::random(15) . '.' . $file->extension();
+                $file->storeAs('images', $imageName, 'public');
+                $savedImageNames[] = $imageName;
 
-        // Create a DOMDocument object and load the HTML content
-        $dom = new DOMDocument();
-        @$dom->loadHTML($html);
-
-        // Create a DOMXPath object
-        $xpath = new DOMXPath($dom);
-
-        // Array of XPath expressions for elements where the post content may be located
-        $contentElementXPaths = config('rssfeed.content_element_xpaths', []);
-
-        $fullContent = '';
-
-        // Loop through the content element XPath expressions
-        foreach ($contentElementXPaths as $xpathExpression) {
-            // Find the elements matching the current XPath expression
-            $contentElements = $xpath->query($xpathExpression);
-
-            // If elements are found, extract the content from the first match
-            if ($contentElements->length > 0) {
-                $contentElement = $contentElements[0];
-
-                // Extract the content from the element
-                $fullContent = $dom->saveHTML($contentElement);
-
-                // Break the loop since we found the content
-                break;
-            }
         }
 
-        // Return the retrieved full post content
-        return $fullContent;
+        return $savedImageNames;
     }
 
     /**
-     * @param  string  $html
-     * @param  int  $size
-     * @return string|null
+     * @param  string  $postLink
+     * @return bool|array
      */
-    public static function getImageWithSizeGreaterThan(string $html, int $size = 200): ?string
+    public function retrieveFullContent(string $postLink): bool|array
     {
-        ini_set('allow_url_fopen', 1);
+        // Fetch the HTML content using cURL
+        $html = $this->fetchContentUsingCurl($postLink); // Use the previously defined cURL fetching function
 
-        $html_parser = new Htmldom();
-        $html_parser->str_get_html($html);
+        if ($html === false) {
+            return false; // Handle the error as appropriate
+        }
 
-        $featured_img = '';
+        // Load the HTML content into DOMDocument
+        $dom = new DOMDocument();
+        @$dom->loadHTML($html);
 
-        foreach ($html_parser->find('img') as $img) {
-            try {
-                [$width] = getimagesize($img->src);
+        // Use DOMXPath to work with the DOM
+        $xpath = new DOMXPath($dom);
 
-                if ($width >= $size) {
-                    $featured_img = $img->src;
-                    break;
+        // Initialize an array to hold the image URLs
+        $imageUrls = [];
+        $selectedContent = '';
+
+        // Process each XPath query in the configuration
+        foreach ($config['content_element_xpaths'] as $xpathQuery) {
+            $elements = $xpath->query($xpathQuery);
+
+            // Check if elements were found for the current XPath query
+            if ($elements->length > 0) {
+                foreach ($elements as $element) {
+                    // Extract and concatenate the HTML of each matching element
+                    $selectedContent .= $dom->saveHTML($element);
+
+                    // Find and store all <img> tags within the current element
+                    $images = $xpath->query('.//img', $element);
+                    foreach ($images as $img) {
+                        $src = $img->getAttribute('src');
+                        $imageUrls[] = $src;
+                    }
                 }
-            } catch (Exception $e) {
-                // Do nothing if image cannot be processed
             }
         }
 
-        return $featured_img ?: null;
+        // Optionally, you might want to remove <script> and <style> from $selectedContent
+        $selectedContent = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', "", $selectedContent);
+        $selectedContent = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', "", $selectedContent);
+
+        // Return the content and images
+        return [
+            'content' => trim($selectedContent),
+            'images' => $imageUrls, // This is an array of image URLs found in the selected content
+        ];
+    }
+    private function fetchContentUsingCurl(string $url): bool|string
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MyRSSReader/1.0)');
+        $data = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return $httpCode === 200 ? $data : false;
     }
 }

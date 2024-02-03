@@ -21,9 +21,10 @@ class RssfeedServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/rssfeed.php' => config_path('/rssfeed.php')
-        ]);
+            __DIR__ . '/../config/rssfeed.php' => config_path('rssfeed.php'),
+        ], 'config');
     }
+
 
     /**
      * Register package config.
