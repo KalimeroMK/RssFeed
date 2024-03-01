@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimpleXMLElement;
+use Illuminate\Support\Log;
 
 class RssFeed implements ShouldQueue
 {
@@ -29,43 +30,47 @@ class RssFeed implements ShouldQueue
         $parsedItems = [];
 
         foreach ($feedUrls as $feedUrl) {
-            $xml = file_get_contents($feedUrl);
-            $xmlObject = new SimpleXMLElement($xml);
+            try {
+                $xml = @file_get_contents($feedUrl);
+                if ($xml === false) {
+                    // Log error or handle it as required
+                    throw new CantOpenFileFromUrlException("Cannot open RSS feed URL: {$feedUrl}");
+                }
+                $xmlObject = new SimpleXMLElement($xml);
 
-            $channelTitle = (string) $xmlObject->channel->title;
-            $channelLink = (string) $xmlObject->channel->link;
-            $channelDescription = (string) $xmlObject->channel->description;
+                $channelTitle = (string) $xmlObject->channel->title;
+                $channelLink = (string) $xmlObject->channel->link;
+                $channelDescription = (string) $xmlObject->channel->description;
+                foreach ($xmlObject->channel->item as $item) {
+                    $itemTitle = (string) $item->title;
+                    $itemLink = (string) $item->link;
+                    $itemPubDate = (string) $item->pubDate;
+                    $itemDescription = (string) $item->description;
 
-            foreach ($xmlObject->channel->item as $item) {
-                $itemTitle = (string) $item->title;
-                $itemLink = (string) $item->link;
-                $itemPubDate = (string) $item->pubDate;
-                $itemDescription = (string) $item->description;
+                    $fullContent = $this->retrieveFullContent($itemLink); // Make sure this always returns an array
+                    $images = $this->saveImagesToStorage($fullContent['images']); // Ensure this returns an array, even if empty
 
-                // Retrieve the full post content
-                $fullContent = $this->retrieveFullContent($itemLink);
-
-                // Save the image to storage
-                $images = $this->saveImagesToStorage($fullContent['images']);
-
-                // Add the extracted item data to the parsedItems array
-                $parsedItems[] = [
-                    'title' => $itemTitle,
-                    'link' => $itemLink,
-                    'pub_date' => $itemPubDate,
-                    'description' => $itemDescription,
-                    'content' => $fullContent,
-                    'image_path' => $images,
-                    'channel_title' => $channelTitle,
-                    'channel_link' => $channelLink,
-                    'channel_description' => $channelDescription,
-                ];
+                    $parsedItems[] = [
+                        'title' => $itemTitle,
+                        'link' => $itemLink,
+                        'pub_date' => $itemPubDate,
+                        'description' => $itemDescription,
+                        'content' => $fullContent['content'], // Make sure to access the 'content' key
+                        'image_path' => $images,
+                        'channel_title' => $channelTitle,
+                        'channel_link' => $channelLink,
+                        'channel_description' => $channelDescription,
+                    ];
+                }
+            } catch (Exception $e) {
+                // Handle exception (log or continue)
+                Log::error("Error parsing RSS Feed: " . $e->getMessage());
+                // Optionally skip current feedUrl or handle as needed
+                continue; // Skip this feedUrl if there's an error
             }
         }
-
         return $parsedItems;
     }
-
     /**
      * @param  array  $images
      * @return array|bool
@@ -154,6 +159,5 @@ class RssFeed implements ShouldQueue
 
         return $httpCode === 200 ? $data : false;
     }
-
 
 }
