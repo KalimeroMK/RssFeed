@@ -145,7 +145,11 @@ class RssFeed implements ShouldQueue
     }
 
 
-    private function fetchContentUsingCurl(string $url): bool|string
+    /**
+     * @param  string  $url
+     * @return bool|string
+     */
+    private function fetchContentUsingCurl(string $url)
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
