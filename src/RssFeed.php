@@ -66,8 +66,10 @@ class RssFeed implements ShouldQueue
                 continue; // Skip this feedUrl if there's an error
             }
         }
+
         return $parsedItems;
     }
+
     /**
      * @param  array  $images
      * @return array|bool
@@ -143,11 +145,6 @@ class RssFeed implements ShouldQueue
     }
 
 
-
-
-
-
-// The cURL fetching function from previous examples
     private function fetchContentUsingCurl(string $url): bool|string
     {
         $ch = curl_init();

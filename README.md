@@ -37,6 +37,26 @@ php artisan vendor:publish --provider="Kalimeromk\Rssfeed\RssFeedServiceProvider
 
 This will publish a rssfeed.php config file to your config directory. Here you can set the XPaths for content elements.
 
+```php
+return [
+    'domain_xpaths' => [
+        [
+            'domain' => 'mistagogia.mk',
+            'content_element_xpaths' => [
+                '//div[@class="single_post"]',
+            ],
+        ],
+    ],
+    'min_image_width' => 300,
+    'image_storage_path' => 'images',
+];
+
+```
+### In this configuration file:
+
+* domain_xpaths: Defines specific XPaths for content elements based on the domain. This allows for precise targeting of content within the RSS feed items for each domain.
+* min_image_width: Sets the minimum width for images to be considered for storage, ensuring that only images of adequate size are saved.
+* image_storage_path: Specifies the path where images from RSS feed items should be stored.
 ## Credits
 
 This package was created by KalimeroMK.
@@ -78,3 +98,4 @@ use Kalimeromk\Rssfeed\Jobs\RssFeedJob;
 $feedUrls = ['https://example.com/rss'];
 
 RssFeedJob::dispatch($feedUrls);
+```
