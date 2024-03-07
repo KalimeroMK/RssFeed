@@ -12,8 +12,7 @@ use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimpleXMLElement;
-use Illuminate\Support\Log;
-
+use Illuminate\Support\Facades\Log;
 class RssFeed implements ShouldQueue
 {
     use Dispatchable;
