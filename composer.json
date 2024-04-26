@@ -37,9 +37,11 @@
         "php": ">=7.4",
         "ext-curl": "*",
         "ext-dom": "*",
-        "ext-simplexml": "*"
+        "ext-simplexml": "*",
+        "kalimeromk/php-goose": "^1.0@dev"
     },
     "require-dev": {
-        "orchestra/testbench": "^6.0"
-    }
+        "orchestra/testbench": "^8.0"
+    },
+    "minimum-stability": "dev"
 }
