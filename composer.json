@@ -1,6 +1,6 @@
 {
     "name": "kalimeromk/rssfeed",
-    "description": "A description for rssfeed.",
+    "description": "A simple RSS feed reader for Laravel",
     "type": "package",
     "license": "MIT",
     "keywords": [
@@ -35,10 +35,10 @@
     },
     "require": {
         "php": ">=7.4",
-        "ext-curl": "*",
-        "ext-dom": "*",
-        "ext-simplexml": "*",
-        "kalimeromk/php-goose": "^1.0@dev"
+        "illuminate/support": "~5.5.0|~5.6.0|~5.7.0|~5.8.0|^6.0|^7.0|^8.0|^9.0|^10.0|^11.0",
+        "simplepie/simplepie": "^1.8.0",
+        "ext-curl": "*"
+
     },
     "require-dev": {
         "orchestra/testbench": "^8.0"
