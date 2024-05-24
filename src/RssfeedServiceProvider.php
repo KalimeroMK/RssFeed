@@ -12,6 +12,7 @@ class RssfeedServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->registerConfig();
+        $this->registerFacade();
 
     }
 
@@ -25,15 +26,21 @@ class RssfeedServiceProvider extends ServiceProvider
         ], 'config');
     }
 
-
     /**
      * Register package config.
      *
      * @return void
      */
-    protected function registerConfig(): void
+    private function registerConfig(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/rssfeed.php', 'content_element_xpaths');
+        $this->mergeConfigFrom(__DIR__ . '/../config/rssfeed.php', 'content_element_xpaths');
+    }
+
+    private function registerFacade(): void
+    {
+        $this->app->bind('rssfeed', function ($app) {
+            return new RssFeed($app);
+        });
     }
 
 }
