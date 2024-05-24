@@ -33,7 +33,7 @@ class RssfeedServiceProvider extends ServiceProvider
      */
     private function registerConfig(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/rssfeed.php', 'content_element_xpaths');
+        $this->mergeConfigFrom(__DIR__ . '/../config/rssfeed.php', 'image_storage_path');
     }
 
     private function registerFacade(): void
