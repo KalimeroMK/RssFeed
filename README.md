@@ -1,27 +1,25 @@
 # RssFeed Laravel Package
 
-This package provides an easy way to parse RSS feeds and save them into your application. It provides features like fetching the entire content of an RSS feed, saving images found in the feed items, and getting full content of each item in the feed.
+This package provides an easy way to parse RSS feeds and save them into your application. It offers features like fetching the entire content of an RSS feed, saving images found in the feed items, and getting the full content of each item in the feed.
 
 ## Features
 
 1. Parses multiple RSS feeds.
-2. Save images in the RSS feed items to a storage location.
+2. Saves images in the RSS feed items to a storage location.
 3. Retrieves the full content of each item in the RSS feed.
 
 ## Requirements
 
 * PHP 7.4 or higher
-* Laravel 8.0 or higher
-* Composer
+* SimplePie PHP library 1.8 or higher
 
 ## Installation
 
 You can install this package via Composer using:
 
-
-``` bash 
+```bash
 composer require kalimeromk/rssfeed
-```
+
 
 This package uses Laravel's auto-discovery feature, so you don't need to register the service provider.
 
@@ -39,23 +37,11 @@ This will publish a rssfeed.php config file to your config directory. Here you c
 
 ```php
 return [
-    'domain_xpaths' => [
-        [
-            'domain' => 'mistagogia.mk',
-            'content_element_xpaths' => [
-                '//div[@class="single_post"]',
-            ],
-        ],
-    ],
-    'min_image_width' => 300,
     'image_storage_path' => 'images',
 ];
 
 ```
 ### In this configuration file:
-
-* domain_xpaths: Defines specific XPaths for content elements based on the domain. This allows for precise targeting of content within the RSS feed items for each domain.
-* min_image_width: Sets the minimum width for images to be considered for storage, ensuring that only images of adequate size are saved.
 * image_storage_path: Specifies the path where images from RSS feed items should be stored.
 ## Credits
 
@@ -70,23 +56,70 @@ The MIT License (MIT). Please see License File for more information.
 Below is an example of how to use this package.
 
 ```php
+namespace App\Http\Controllers;
+
 use Kalimeromk\Rssfeed\RssFeed;
+use Illuminate\Http\Request;
 
-$feedUrls = ['http://example.com/rssfeed1', 'http://example.com/rssfeed2'];
-$rssFeed = new RssFeed();
-$feedData = $rssFeed->parseRssFeeds($feedUrls);
+class RssFeedController extends Controller
+{
+    public function index()
+    {
+        $feed = RssFeed::parseRssFeeds('https://example.com/feed/');
+        
+       $result = [
+            'title' => $feed->get_title(),
+            'description' => $feed->get_description(),
+            'permalink' => $feed->get_permalink(),
+            'link' => $feed->get_link(),
+            'copyright' => $feed->get_copyright(),
+            'language' => $feed->get_language(),
+            'image_url' => $feed->get_image_url(),
+            'author' => $feed->get_author()
+        ];
+        foreach ($feed->get_items(0, $feed->get_item_quantity()) as $item) {
+            $i['title'] = $item->get_title();
+            $i['description'] = $item->get_description();
+            $i['id'] = $item->get_id();
+            $i['content'] = $item->get_content();
+            $i['thumbnail'] = $item->get_thumbnail() ?: $rssFeed->extractImageFromDescription($item->get_content());
+            $i['category'] = $item->get_category();
+            $i['categories'] = $item->get_categories();
+            $i['author'] = $item->get_author();
+            $i['authors'] = $item->get_authors();
+            $i['contributor'] = $item->get_contributor();
+            $i['copyright'] = $item->get_copyright();
+            $i['date'] = $item->get_date();
+            $i['updated_date'] = $item->get_updated_date();
+            $i['local_date'] = $item->get_local_date();
+            $i['permalink'] = $item->get_permalink();
+            $i['link'] = $item->get_link();
+            $i['links'] = $item->get_links();
+            $i['enclosure'] = $item->get_enclosure();
+            $i['audio_link'] = $item->get_enclosure() ? $item->get_enclosure()->get_link() : null;
+            $i['enclosures'] = $item->get_enclosures();
+            $i['latitude'] = $item->get_latitude();
+            $i['longitude'] = $item->get_longitude();
+            $i['source'] = $item->get_source();
 
-foreach ($feedData as $item) {
-    echo 'Title: ' . $item['title'] . PHP_EOL;
-    echo 'Link: ' . $item['link'] . PHP_EOL;
-    echo 'Publication Date: ' . $item['pub_date'] . PHP_EOL;
-    echo 'Description: ' . $item['description'] . PHP_EOL;
-    echo 'Content: ' . $item['content'] . PHP_EOL;
-    echo 'Image Path: ' . $item['image_path'] . PHP_EOL;
-    echo 'Channel Title: ' . $item['channel_title'] . PHP_EOL;
-    echo 'Channel Link: ' . $item['channel_link'] . PHP_EOL;
-    echo 'Channel Description: ' . $item['channel_description'] . PHP_EOL;
+            $result['items'][] = $i;
+        }
+        
+        return $result;
+    }
 }
+```
+
+## Saving Images
+
+You can save images found in the RSS feed items using the saveImagesToStorage method. This method accepts an array of image URLs and returns an array of saved image names.
+
+```php  
+$images = [
+    'http://example.com/image1.jpg',
+    'http://example.com/image2.jpg',
+];
+$savedImageNames = $rssFeed->saveImagesToStorage($images);
 ```
 ## Jobs
 
