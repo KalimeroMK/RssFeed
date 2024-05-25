@@ -12,9 +12,9 @@ use SimplePie\SimplePie;
 
 class RssFeed implements ShouldQueue
 {
-    use Dispatchable;x
+    use Dispatchable;
 
-    private $app;
+    private Container $app;
 
     public function __construct(Container $app)
     {
