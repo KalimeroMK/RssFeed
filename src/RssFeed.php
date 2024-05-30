@@ -76,7 +76,7 @@ class RssFeed implements ShouldQueue
      * @return array An array of the generated image names.
      * @throws CantOpenFileFromUrlException
      */
-    public function saveImagesToStorage($images)
+    public function saveImagesToStorage(array $images)
     {
         $savedImageNames = [];
         $imageStoragePath = config('rssfeed.image_storage_path', 'images');
@@ -86,13 +86,65 @@ class RssFeed implements ShouldQueue
                 // Skip non-string or empty values
                 continue;
             }
-            $file = UrlUploadedFile::createFromUrl($image);
-            $imageName = Str::random(15) . '.' . $file->extension();
-            $file->storeAs($imageStoragePath, $imageName, 'public');
-            $savedImageNames[] = $imageName;
+
+            try {
+                $file = UrlUploadedFile::createFromUrl($image);
+
+                if ($file === null) {
+                    // Log the error or handle it as needed
+                    \Log::error('Failed to create file from URL: ' . $image);
+                    continue;
+                }
+
+                $extension = $file->extension();
+                if (empty($extension)) {
+                    // Attempt to infer the file extension from the URL or MIME type
+                    $extension = $this->inferExtension($image, $file->getMimeType());
+                }
+
+                $imageName = Str::random(15) . '.' . $extension;
+                $file->storeAs($imageStoragePath, $imageName, 'public');
+                $savedImageNames[] = $imageName;
+            } catch (\Exception $e) {
+                // Log the exception and continue with the next image
+                \Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
+                continue;
+            }
         }
         return $savedImageNames;
     }
+    /**
+     * Infers the file extension from the URL or MIME type.
+     *
+     * This method first attempts to infer the file extension from the URL.
+     * If the URL does not contain an extension, it falls back to mapping MIME types to extensions.
+     * If the MIME type is unknown, it defaults to 'bin'.
+     *
+     * @param  string  $url The URL of the file.
+     * @param  string  $mimeType The MIME type of the file.
+     * @return string The inferred file extension.
+     */
+    private function inferExtension(string $url, string $mimeType)
+    {
+        // Attempt to infer the extension from the URL
+        $pathInfo = pathinfo(parse_url($url, PHP_URL_PATH));
+        if (isset($pathInfo['extension'])) {
+            return $pathInfo['extension'];
+        }
+
+        // Fallback to mapping MIME types to extensions
+        $mimeTypeMapping = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            // Add more MIME type mappings as needed
+        ];
+
+        return $mimeTypeMapping[$mimeType] ?? 'bin'; // Default to 'bin' if MIME type is unknown
+    }
+
+
 
     /**
      * Extracts the image source URL from the provided HTML description.
@@ -103,7 +155,7 @@ class RssFeed implements ShouldQueue
      * @param  string  $content  The HTML description from which to extract the image source URL.
      * @return string|null The extracted image source URL, or null if no <img> tag is found.
      */
-    public function extractImageFromDescription(string $content): ?string
+    public function extractImageFromDescription($content): ?string
     {
         if (preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content, $image)) {
             return $image['src'];
