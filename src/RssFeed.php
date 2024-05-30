@@ -2,9 +2,11 @@
 
 namespace Kalimeromk\Rssfeed;
 
+use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
@@ -33,9 +35,13 @@ class RssFeed implements ShouldQueue
      * @return SimplePie The initialized SimplePie object.
      *
      * @throws Exception If the SimplePie object cannot be created or initialized.
+     * @throws CantOpenFileFromUrlException
      */
     public function parseRssFeeds(string $url, $jobId = null)
     {
+        if (!$this->urlExists($url)) {
+            throw new CantOpenFileFromUrlException("Cannot open RSS feed URL: {$url}");
+        }
         $simplePie = $this->app->make(SimplePie::class);
 
         $simplePie->enable_cache(false);
@@ -100,5 +106,35 @@ class RssFeed implements ShouldQueue
             return $image['src'];
         }
         return null;
+    }
+
+    /**
+     * Checks if a given URL exists.
+     *
+     * This method sends a GET request to the provided URL with specific headers and options.
+     * The 'verify' option is set to false to skip SSL verification, and the 'timeout' option is set to 60 seconds.
+     * The headers include a specific 'User-Agent' and 'Accept' values.
+     * If the GET request is successful, the method returns true.
+     * If the GET request fails (throws an exception), the method returns false.
+     *
+     * @param string $url The URL to check.
+     * @return bool Returns true if the URL exists (the GET request is successful), false otherwise.
+     * @throws Exception If the GET request fails.
+     */
+    private function urlExists(string $url): bool
+    {
+        try {
+            $response = Http::withOptions([
+                'verify' => false, // Skip SSL verification
+                'timeout' => 60, // Increase timeout duration
+            ])->withHeaders([
+                'User-Agent' => 'Full-Text RSS',
+                'Accept' => 'application/rss+xml, application/xml, text/xml',
+            ])->get($url);
+
+            return $response->successful();
+        } catch (Exception $e) {
+            return false;
+        }
     }
 }
