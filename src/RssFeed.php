@@ -76,18 +76,21 @@ class RssFeed implements ShouldQueue
      * @return array An array of the generated image names.
      * @throws CantOpenFileFromUrlException
      */
-    public function saveImagesToStorage(array $images): array
+    public function saveImagesToStorage($images)
     {
         $savedImageNames = [];
         $imageStoragePath = config('rssfeed.image_storage_path', 'images');
 
         foreach ($images as $image) {
+            if (!is_string($image) || empty($image)) {
+                // Skip non-string or empty values
+                continue;
+            }
             $file = UrlUploadedFile::createFromUrl($image);
             $imageName = Str::random(15) . '.' . $file->extension();
             $file->storeAs($imageStoragePath, $imageName, 'public');
             $savedImageNames[] = $imageName;
         }
-
         return $savedImageNames;
     }
 
