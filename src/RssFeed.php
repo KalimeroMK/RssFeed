@@ -2,11 +2,14 @@
 
 namespace Kalimeromk\Rssfeed;
 
+use DOMDocument;
+use DOMXPath;
 use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
@@ -37,7 +40,7 @@ class RssFeed implements ShouldQueue
      * @throws Exception If the SimplePie object cannot be created or initialized.
      * @throws CantOpenFileFromUrlException
      */
-    public function parseRssFeeds(string $url, $jobId = null)
+    public function RssFeeds(string $url, $jobId = null): SimplePie
     {
         if (!$this->urlExists($url)) {
             throw new CantOpenFileFromUrlException("Cannot open RSS feed URL: {$url}");
@@ -74,27 +77,19 @@ class RssFeed implements ShouldQueue
      *
      * @param  array  $images  An array of image URLs to download and save.
      * @return array An array of the generated image names.
-     * @throws CantOpenFileFromUrlException
      */
-    public function saveImagesToStorage(array $images)
+    public function saveImagesToStorage(array $images): array
     {
         $savedImageNames = [];
         $imageStoragePath = config('rssfeed.image_storage_path', 'images');
 
         foreach ($images as $image) {
-            if (!is_string($image) || empty($image)) {
-                // Skip non-string or empty values
+            if (!is_string($image) || ($image === '' || $image === '0')) {
                 continue;
             }
 
             try {
                 $file = UrlUploadedFile::createFromUrl($image);
-
-                if ($file === null) {
-                    // Log the error or handle it as needed
-                    \Log::error('Failed to create file from URL: ' . $image);
-                    continue;
-                }
 
                 $extension = $file->extension();
                 if (empty($extension)) {
@@ -107,7 +102,7 @@ class RssFeed implements ShouldQueue
                 $savedImageNames[] = $imageName;
             } catch (\Exception $e) {
                 // Log the exception and continue with the next image
-                \Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
+                Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
                 continue;
             }
         }
@@ -124,7 +119,7 @@ class RssFeed implements ShouldQueue
      * @param  string  $mimeType The MIME type of the file.
      * @return string The inferred file extension.
      */
-    private function inferExtension(string $url, string $mimeType)
+    private function inferExtension(string $url, string $mimeType): string
     {
         // Attempt to infer the extension from the URL
         $pathInfo = pathinfo(parse_url($url, PHP_URL_PATH));
@@ -155,7 +150,7 @@ class RssFeed implements ShouldQueue
      * @param  string  $content  The HTML description from which to extract the image source URL.
      * @return string|null The extracted image source URL, or null if no <img> tag is found.
      */
-    public function extractImageFromDescription($content): ?string
+    public function extractImageFromDescription(string $content): ?string
     {
         if (preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content, $image)) {
             return $image['src'];
@@ -176,7 +171,7 @@ class RssFeed implements ShouldQueue
      * @return bool Returns true if the URL exists (the GET request is successful), false otherwise.
      * @throws Exception If the GET request fails.
      */
-    private function urlExists(string $url): bool
+    public function urlExists(string $url): bool
     {
         try {
             $response = Http::withOptions([
@@ -190,6 +185,75 @@ class RssFeed implements ShouldQueue
             return $response->successful();
         } catch (Exception $e) {
             return false;
+        }
+    }
+
+    public function parseRssFeeds(string $url): array
+    {
+        $feed = new SimplePie();
+        $feed->set_feed_url($url);
+        $feed->enable_cache(false);
+        $feed->init();
+        $feed->handle_content_type();
+
+        $parsedItems = [];
+
+        foreach ($feed->get_items() as $item) {
+            $title       = $item->get_title();
+            $description = $item->get_description();
+            $content     = $item->get_content();
+            $link        = $item->get_link();
+
+
+            if ($content === $description || strlen(strip_tags($content)) < 200) {
+                $content = $this->fetchFullContentFromPost($link);
+            }
+
+            $parsedItems[] = [
+                'title'       => $title,
+                'description' => $description,
+                'content'     => $content,
+                'url'         => $link,
+            ];
+        }
+
+        return $parsedItems;
+    }
+
+    /**
+     * @param  string  $postUrl
+     * @return string
+     */
+    protected function fetchFullContentFromPost(string $postUrl): string
+    {
+        try {
+            $response = Http::get($postUrl);
+            if ($response->failed()) {
+                return '';
+            }
+            $html = $response->body();
+
+            libxml_use_internal_errors(true);
+            $dom = new DOMDocument();
+            $dom->loadHTML($html);
+            libxml_clear_errors();
+
+            $xpath = new DOMXPath($dom);
+
+            $nodes = $xpath->query("//div[contains(@class, 'entry-content')]");
+
+            if ($nodes->length === 0) {
+                return '';
+            }
+
+            $fullContent = '';
+            foreach ($nodes as $node) {
+                $fullContent .= $dom->saveHTML($node);
+            }
+
+            return $fullContent;
+        } catch (\Exception $e) {
+            return $e->getMessage();
         }
     }
 }

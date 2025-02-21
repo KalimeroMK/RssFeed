@@ -28,8 +28,6 @@ class RssfeedServiceProvider extends ServiceProvider
 
     /**
      * Register package config.
-     *
-     * @return void
      */
     private function registerConfig(): void
     {
@@ -38,7 +36,7 @@ class RssfeedServiceProvider extends ServiceProvider
 
     private function registerFacade(): void
     {
-        $this->app->bind('rssfeed', function ($app) {
+        $this->app->bind('rssfeed', function ($app): \Kalimeromk\Rssfeed\RssFeed {
             return new RssFeed($app);
         });
     }
