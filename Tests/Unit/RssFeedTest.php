@@ -38,6 +38,7 @@ class RssFeedTest extends TestCase
      * of SimplePie and that the title of the feed is a non-empty string.
      *
      * @return void
+     * @throws CantOpenFileFromUrlException
      */
     public function test_it_can_parse_rss_feeds(): void
     {
@@ -99,22 +100,7 @@ class RssFeedTest extends TestCase
 
         $this->assertNull($imageUrl);
     }
-    public function it_infers_extension_from_mime_type()
-    {
-        $imageUrls = [
-            'https://example.com/image_without_extension',
-        ];
 
-        Http::fake([
-            'https://example.com/image_without_extension' => Http::response('image content', 200, ['Content-Type' => 'image/jpeg']),
-        ]);
 
-        $rssFeed = new RssFeed(app());
-        $savedImages = $rssFeed->saveImagesToStorage($imageUrls);
-
-        $this->assertCount(1, $savedImages);
-        $this->assertStringEndsWith('.jpg', $savedImages[0]);
-        Storage::disk('public')->assertExists('images/' . $savedImages[0]);
-    }
 
 }

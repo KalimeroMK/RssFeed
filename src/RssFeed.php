@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimplePie\SimplePie;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class RssFeed implements ShouldQueue
 {
@@ -78,36 +79,51 @@ class RssFeed implements ShouldQueue
      * @param  array  $images  An array of image URLs to download and save.
      * @return array An array of the generated image names.
      */
-    public function saveImagesToStorage(array $images): array
+    public function saveImagesToStorage(array $images, $model = null): array
     {
         $savedImageNames = [];
         $imageStoragePath = config('rssfeed.image_storage_path', 'images');
+        $spatieEnabled = config('rssfeed.spatie_enabled', false);
+        $spatieDisk = config('rssfeed.spatie_disk', 'public');
+        $spatieMediaType = config('rssfeed.spatie_media_type', 'image');
+        $baseUrl = config('app.url'); // Get base URL from .env
 
         foreach ($images as $image) {
-            if (!is_string($image) || ($image === '' || $image === '0')) {
+            if (!is_string($image) || empty($image)) {
                 continue;
             }
 
             try {
                 $file = UrlUploadedFile::createFromUrl($image);
-
                 $extension = $file->extension();
+
                 if (empty($extension)) {
-                    // Attempt to infer the file extension from the URL or MIME type
                     $extension = $this->inferExtension($image, $file->getMimeType());
                 }
 
                 $imageName = Str::random(15) . '.' . $extension;
-                $file->storeAs($imageStoragePath, $imageName, 'public');
-                $savedImageNames[] = $imageName;
+
+                if ($spatieEnabled && $model && method_exists($model, 'addMediaFromUrl')) {
+                    // Ensure the model implements HasMedia before using Spatie
+                    $media = $model->addMediaFromUrl($image)
+                        ->toMediaCollection($spatieMediaType, $spatieDisk);
+
+                    $savedImageNames[] = $media->getUrl(); // Store Spatie media URL
+                } else {
+                    // Default Laravel Storage
+                    $file->storeAs($imageStoragePath, $imageName, $spatieDisk);
+                    $savedImageNames[] = "{$baseUrl}/storage/{$imageStoragePath}/{$imageName}"; // Use APP_URL
+                }
             } catch (\Exception $e) {
-                // Log the exception and continue with the next image
                 Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
                 continue;
             }
         }
+
         return $savedImageNames;
     }
+
+
     /**
      * Infers the file extension from the URL or MIME type.
      *
@@ -188,6 +204,10 @@ class RssFeed implements ShouldQueue
         }
     }
 
+    /**
+     * @param  string  $url
+     * @return array
+     */
     public function parseRssFeeds(string $url): array
     {
         $feed = new SimplePie();
@@ -224,7 +244,7 @@ class RssFeed implements ShouldQueue
      * @param  string  $postUrl
      * @return string
      */
-    protected function fetchFullContentFromPost(string $postUrl): string
+    public function fetchFullContentFromPost(string $postUrl): string
     {
         try {
             $response = Http::get($postUrl);
