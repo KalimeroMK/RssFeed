@@ -220,6 +220,9 @@ class RssFeed implements ShouldQueue
             $description = $item->get_description();
             $content     = $item->get_content();
             $link        = $item->get_link();
+            $categories  = $item->get_categories();
+            $date        = $item->get_date();
+            $enclosure   = $item->get_enclosure();
 
 
             if ($content === $description || strlen(strip_tags($content)) < 200) {
@@ -231,6 +234,9 @@ class RssFeed implements ShouldQueue
                 'description' => $description,
                 'content'     => $content,
                 'url'         => $link,
+                'categories'  => $categories,
+                'date'        => $date,
+                'enclosure'   => $enclosure
             ];
         }
 

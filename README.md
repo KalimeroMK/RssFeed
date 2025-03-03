@@ -43,7 +43,9 @@ return [
     'image_storage_path' => 'images',
     'spatie_media_type' => 'image',
     'spatie_disk' => 'public',
-    'spatie_enabled' => false, // Set to true if using Spatie Media Library
+    'spatie_enabled' => false,
+     'default_selector' => '//div[contains(@class, "item-page")]
+                           | //div[contains(@class, "post-content") and contains(@class, "entry-content")]',// Set to true if using Spatie Media Library
 ];
 ```
 
@@ -52,6 +54,7 @@ return [
 * `spatie_media_type`: Defines the media collection type when using Spatie Media Library.
 * `spatie_disk`: Specifies which Laravel storage disk to use.
 * `spatie_enabled`: Set to `true` if you want to store images using Spatie Media Library.
+* `default_selector`: The default selector to use when extracting the full content of an RSS feed item.
 
 ## Usage
 
