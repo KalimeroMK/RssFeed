@@ -2,8 +2,6 @@
 
 namespace Kalimeromk\Rssfeed;
 
-use DOMDocument;
-use DOMXPath;
 use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -14,7 +12,6 @@ use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimplePie\SimplePie;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class RssFeed implements ShouldQueue
 {
@@ -251,16 +248,17 @@ class RssFeed implements ShouldQueue
             if ($response->failed()) {
                 return '';
             }
+
             $html = $response->body();
 
             libxml_use_internal_errors(true);
-            $dom = new DOMDocument();
-            $dom->loadHTML($html);
+            $dom = new \DOMDocument();
+            $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
             libxml_clear_errors();
 
-            $xpath = new DOMXPath($dom);
+            $xpath = new \DOMXPath($dom);
 
-            $nodes = $xpath->query("//div[contains(@class, 'entry-content')]");
+            $nodes = $xpath->query(config('rssfeed.default_selector'));
 
             if ($nodes->length === 0) {
                 return '';
