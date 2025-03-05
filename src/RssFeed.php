@@ -220,8 +220,12 @@ class RssFeed implements ShouldQueue
         foreach ($feed->get_items() as $item) {
             $title       = $item->get_title();
             $description = $item->get_description();
+            $permalink = $feed->get_permalink();
+            $link = $item->get_link();
+            $copyright = $item->get_copyright();
+            $author = $item->get_author();
+            $language = $item->get_language();
             $content     = $item->get_content();
-            $link        = $item->get_link();
             $categories  = $item->get_categories();
             $date        = $item->get_date();
             $enclosure   = $item->get_enclosure();
@@ -234,8 +238,12 @@ class RssFeed implements ShouldQueue
             $parsedItems[] = [
                 'title'       => $title,
                 'description' => $description,
+                'permalink' => $permalink,
+                'link' => $link,
+                'copyright' => $copyright,
+                'author' => $author,
+                'language' => $language,
                 'content'     => $content,
-                'url'         => $link,
                 'categories'  => $categories,
                 'date'        => $date,
                 'enclosure'   => $enclosure
