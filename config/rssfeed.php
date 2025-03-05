@@ -27,7 +27,6 @@ return [
     |
     */
     'content_selectors' => [
-
     ],
 
     /*

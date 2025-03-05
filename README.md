@@ -44,7 +44,9 @@ return [
     'spatie_media_type' => 'image',
     'spatie_disk' => 'public',
     'spatie_enabled' => false,
-     'default_selector' => '//div[contains(@class, "item-page")]
+    'content_selectors' => [
+    ],
+    'default_selector' => '//div[contains(@class, "item-page")]
                            | //div[contains(@class, "post-content") and contains(@class, "entry-content")]',// Set to true if using Spatie Media Library
 ];
 ```
@@ -55,6 +57,7 @@ return [
 * `spatie_disk`: Specifies which Laravel storage disk to use.
 * `spatie_enabled`: Set to `true` if you want to store images using Spatie Media Library.
 * `default_selector`: The default selector to use when extracting the full content of an RSS feed item.
+* `content_selectors`: Here you can map specific domains to custom XPath selectors for fetching full content from a post. If the post URL belongs to one of these domains, its selector will be used.
 
 ## Usage
 

@@ -2,6 +2,8 @@
 
 namespace Kalimeromk\Rssfeed;
 
+use DOMDocument;
+use DOMXPath;
 use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -247,10 +249,14 @@ class RssFeed implements ShouldQueue
      * @param  string  $postUrl
      * @return string
      */
+    /**
+     * Fetches the full content from a post URL using a domain-specific XPath selector.
+     */
     public function fetchFullContentFromPost(string $postUrl): string
     {
         try {
             $response = Http::get($postUrl);
+
             if ($response->failed()) {
                 return '';
             }
@@ -258,13 +264,22 @@ class RssFeed implements ShouldQueue
             $html = $response->body();
 
             libxml_use_internal_errors(true);
-            $dom = new \DOMDocument();
+
+            $dom = new DOMDocument();
             $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
             libxml_clear_errors();
 
-            $xpath = new \DOMXPath($dom);
+            $xpath = new DOMXPath($dom);
 
-            $nodes = $xpath->query(config('rssfeed.default_selector'));
+            // 1. Extract just the host/domain from the URL
+            $domain = parse_url($postUrl, PHP_URL_HOST);
+
+            // 2. Fetch the selector from config; if not found, use the default
+            $selector = config("rssfeed.content_selectors.{$domain}")
+                ?? config('rssfeed.default_selector');
+
+            // 3. Use the resolved selector in the XPath query
+            $nodes = $xpath->query($selector);
 
             if ($nodes->length === 0) {
                 return '';
@@ -279,5 +294,6 @@ class RssFeed implements ShouldQueue
         } catch (\Exception $e) {
             return $e->getMessage();
         }
+
     }
 }
