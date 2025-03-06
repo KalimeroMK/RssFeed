@@ -85,7 +85,6 @@ class RssFeed implements ShouldQueue
         $spatieEnabled = config('rssfeed.spatie_enabled', false);
         $spatieDisk = config('rssfeed.spatie_disk', 'public');
         $spatieMediaType = config('rssfeed.spatie_media_type', 'image');
-        $baseUrl = config('app.url'); // Get base URL from .env
 
         foreach ($images as $image) {
             if (!is_string($image) || empty($image)) {
@@ -103,16 +102,12 @@ class RssFeed implements ShouldQueue
                 $imageName = Str::random(15) . '.' . $extension;
 
                 if ($spatieEnabled && $model && method_exists($model, 'addMediaFromUrl')) {
-                    // Ensure the model implements HasMedia before using Spatie
                     $media = $model->addMediaFromUrl($image)
                         ->toMediaCollection($spatieMediaType, $spatieDisk);
-
-                    $savedImageNames[] = $media->getUrl(); // Store Spatie media URL
                 } else {
-                    // Default Laravel Storage
                     $file->storeAs($imageStoragePath, $imageName, $spatieDisk);
-                    $savedImageNames[] = "{$baseUrl}/storage/{$imageStoragePath}/{$imageName}"; // Use APP_URL
                 }
+                $savedImageNames[] = $imageName;
             } catch (\Exception $e) {
                 Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
                 continue;
