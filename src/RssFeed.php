@@ -278,8 +278,8 @@ class RssFeed implements ShouldQueue
             $domain = parse_url($postUrl, PHP_URL_HOST);
 
             // 2. Fetch the selector from config; if not found, use the default
-            $selector = config("rssfeed.content_selectors.{$domain}")
-                ?? config('rssfeed.default_selector');
+            $selectors = config("rssfeed.content_selectors", []);
+            $selector = $selectors[$domain] ?? config('rssfeed.default_selector');
 
             // 3. Use the resolved selector in the XPath query
             $nodes = $xpath->query($selector);
