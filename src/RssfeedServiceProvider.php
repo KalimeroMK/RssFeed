@@ -22,7 +22,7 @@ class RssfeedServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/rssfeed.php' => config_path('rssfeed.php'),
+            __DIR__.'/../config/rssfeed.php' => config_path('rssfeed.php'),
         ], 'config');
     }
 
@@ -31,7 +31,7 @@ class RssfeedServiceProvider extends ServiceProvider
      */
     private function registerConfig(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/rssfeed.php', 'image_storage_path');
+        $this->mergeConfigFrom(__DIR__.'/../config/rssfeed.php', 'image_storage_path');
     }
 
     private function registerFacade(): void
@@ -40,5 +40,4 @@ class RssfeedServiceProvider extends ServiceProvider
             return new RssFeed($app);
         });
     }
-
 }

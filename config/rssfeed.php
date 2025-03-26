@@ -12,9 +12,9 @@ return [
     |
     */
     'image_storage_path' => 'images',
-    'spatie_media_type'  => 'image',
-    'spatie_disk'        => 'public',
-    'spatie_enabled'     => false, // Set to true if you want to use Spatie Media Library
+    'spatie_media_type' => 'image',
+    'spatie_disk' => 'public',
+    'spatie_enabled' => false, // Set to true if you want to use Spatie Media Library
 
     /*
     |--------------------------------------------------------------------------
@@ -39,7 +39,7 @@ return [
     | expressions used to extract main article content from web pages.
     |
     */
-    'default_selector' => implode(" | ", [
+    'default_selector' => implode(' | ', [
         '//article',
         '//div[@id="content"]',
         '//div[contains(@class, "entry-content")]',

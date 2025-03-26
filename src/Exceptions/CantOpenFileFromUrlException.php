@@ -2,10 +2,9 @@
 
 namespace Kalimeromk\Rssfeed\Exceptions;
 
-
 use Exception;
 
-class  CantOpenFileFromUrlException extends Exception
+class CantOpenFileFromUrlException extends Exception
 {
     /**
      * Constructs a new CantOpenFileFromUrlException.

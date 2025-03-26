@@ -42,7 +42,7 @@ class RssFeed implements ShouldQueue
      */
     public function RssFeeds(string $url, $jobId = null): SimplePie
     {
-        if (!$this->urlExists($url)) {
+        if (! $this->urlExists($url)) {
             throw new CantOpenFileFromUrlException("Cannot open RSS feed URL: {$url}");
         }
         $simplePie = $this->app->make(SimplePie::class);
@@ -63,6 +63,7 @@ class RssFeed implements ShouldQueue
 
         $simplePie->set_feed_url($url);
         $simplePie->init();
+
         return $simplePie;
     }
 
@@ -87,7 +88,7 @@ class RssFeed implements ShouldQueue
         $spatieMediaType = config('rssfeed.spatie_media_type', 'image');
 
         foreach ($images as $image) {
-            if (!is_string($image) || empty($image)) {
+            if (! is_string($image) || empty($image)) {
                 continue;
             }
 
@@ -99,7 +100,7 @@ class RssFeed implements ShouldQueue
                     $extension = $this->inferExtension($image, $file->getMimeType());
                 }
 
-                $imageName = Str::random(15) . '.' . $extension;
+                $imageName = Str::random(15).'.'.$extension;
 
                 if ($spatieEnabled && $model && method_exists($model, 'addMediaFromUrl')) {
                     $media = $model->addMediaFromUrl($image)
@@ -109,14 +110,14 @@ class RssFeed implements ShouldQueue
                 }
                 $savedImageNames[] = $imageName;
             } catch (\Exception $e) {
-                Log::error('Error processing image URL: ' . $image, ['exception' => $e]);
+                Log::error('Error processing image URL: '.$image, ['exception' => $e]);
+
                 continue;
             }
         }
 
         return $savedImageNames;
     }
-
 
     /**
      * Infers the file extension from the URL or MIME type.
@@ -125,8 +126,8 @@ class RssFeed implements ShouldQueue
      * If the URL does not contain an extension, it falls back to mapping MIME types to extensions.
      * If the MIME type is unknown, it defaults to 'bin'.
      *
-     * @param  string  $url The URL of the file.
-     * @param  string  $mimeType The MIME type of the file.
+     * @param  string  $url  The URL of the file.
+     * @param  string  $mimeType  The MIME type of the file.
      * @return string The inferred file extension.
      */
     private function inferExtension(string $url, string $mimeType): string
@@ -149,8 +150,6 @@ class RssFeed implements ShouldQueue
         return $mimeTypeMapping[$mimeType] ?? 'bin'; // Default to 'bin' if MIME type is unknown
     }
 
-
-
     /**
      * Extracts the image source URL from the provided HTML description.
      *
@@ -165,6 +164,7 @@ class RssFeed implements ShouldQueue
         if (preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content, $image)) {
             return $image['src'];
         }
+
         return null;
     }
 
@@ -177,8 +177,9 @@ class RssFeed implements ShouldQueue
      * If the GET request is successful, the method returns true.
      * If the GET request fails (throws an exception), the method returns false.
      *
-     * @param string $url The URL to check.
+     * @param  string  $url  The URL to check.
      * @return bool Returns true if the URL exists (the GET request is successful), false otherwise.
+     *
      * @throws Exception If the GET request fails.
      */
     public function urlExists(string $url): bool
@@ -198,13 +199,9 @@ class RssFeed implements ShouldQueue
         }
     }
 
-    /**
-     * @param  string  $url
-     * @return array
-     */
     public function parseRssFeeds(string $url): array
     {
-        $feed = new SimplePie();
+        $feed = new SimplePie;
         $feed->set_feed_url($url);
         $feed->enable_cache(false);
         $feed->init();
@@ -213,45 +210,40 @@ class RssFeed implements ShouldQueue
         $parsedItems = [];
 
         foreach ($feed->get_items() as $item) {
-            $title       = $item->get_title();
+            $title = $item->get_title();
             $description = $item->get_description();
             $permalink = $feed->get_permalink();
             $link = $item->get_link();
             $copyright = $item->get_copyright();
             $author = $item->get_author();
             $language = $item->get_language();
-            $content     = $item->get_content();
-            $categories  = $item->get_categories();
-            $date        = $item->get_date();
-            $enclosure   = $item->get_enclosure();
-
+            $content = $item->get_content();
+            $categories = $item->get_categories();
+            $date = $item->get_date();
+            $enclosure = $item->get_enclosure();
 
             if ($content === $description || strlen(strip_tags($content)) < 200) {
                 $content = $this->fetchFullContentFromPost($link);
             }
 
             $parsedItems[] = [
-                'title'       => $title,
+                'title' => $title,
                 'description' => $description,
                 'permalink' => $permalink,
                 'link' => $link,
                 'copyright' => $copyright,
                 'author' => $author,
                 'language' => $language,
-                'content'     => $content,
-                'categories'  => $categories,
-                'date'        => $date,
-                'enclosure'   => $enclosure
+                'content' => $content,
+                'categories' => $categories,
+                'date' => $date,
+                'enclosure' => $enclosure,
             ];
         }
 
         return $parsedItems;
     }
 
-    /**
-     * @param  string  $postUrl
-     * @return string
-     */
     /**
      * Fetches the full content from a post URL using a domain-specific XPath selector.
      */
@@ -268,7 +260,7 @@ class RssFeed implements ShouldQueue
 
             libxml_use_internal_errors(true);
 
-            $dom = new DOMDocument();
+            $dom = new DOMDocument;
             $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
             libxml_clear_errors();
 
@@ -278,7 +270,7 @@ class RssFeed implements ShouldQueue
             $domain = parse_url($postUrl, PHP_URL_HOST);
 
             // 2. Fetch the selector from config; if not found, use the default
-            $selectors = config("rssfeed.content_selectors", []);
+            $selectors = config('rssfeed.content_selectors', []);
             $selector = $selectors[$domain] ?? config('rssfeed.default_selector');
 
             // 3. Use the resolved selector in the XPath query

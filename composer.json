@@ -44,7 +44,8 @@
     "require-dev": {
         "orchestra/testbench": "^9",
         "phpunit/phpunit": "^11.5.6",
-        "rector/rector": "2.0.9"
+        "rector/rector": "2.0.9",
+        "laravel/pint": "dev-main"
     },
     "minimum-stability": "dev"
 }

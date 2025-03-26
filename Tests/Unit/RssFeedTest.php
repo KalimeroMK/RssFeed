@@ -37,7 +37,6 @@ class RssFeedTest extends TestCase
      * can be parsed correctly. It asserts that the parsed RSS feed is an instance
      * of SimplePie and that the title of the feed is a non-empty string.
      *
-     * @return void
      * @throws CantOpenFileFromUrlException
      */
     public function test_it_can_parse_rss_feeds(): void
@@ -147,7 +146,6 @@ class RssFeedTest extends TestCase
         $this->assertEquals('', $result);
     }
 
-
     public function test_returns_error_message_when_exception_thrown()
     {
         $postUrl = 'http://example.com/post';
@@ -169,5 +167,4 @@ class RssFeedTest extends TestCase
         config()->set("rssfeed.content_selectors.$domain", $selector);
         $this->assertEquals($selector, config("rssfeed.content_selectors.$domain"));
     }
-
 }
