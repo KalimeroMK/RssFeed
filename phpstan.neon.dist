@@ -1,0 +1,12 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    paths:
+        - src
+        - Tests
+    tmpDir: .phpstan
+
+    ignoreErrors:
+        - '#no value type specified in iterable type array#'
