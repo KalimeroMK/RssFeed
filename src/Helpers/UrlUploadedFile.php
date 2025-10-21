@@ -38,8 +38,16 @@ class UrlUploadedFile extends UploadedFile
 
         $tempFile = tempnam(sys_get_temp_dir(), 'url-file-');
 
-        file_put_contents($tempFile, $stream);
+        $dest = fopen($tempFile, 'w');
+        if ($dest === false) {
+            fclose($stream);
+            throw new CantOpenFileFromUrlException($url);
+        }
 
-        return new static($tempFile, $originalName, $mimeType, $error, $test);
+        stream_copy_to_stream($stream, $dest);
+        fclose($dest);
+        fclose($stream);
+
+        return new self($tempFile, $originalName, $mimeType, $error, $test);
     }
 }

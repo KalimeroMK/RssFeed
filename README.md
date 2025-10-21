@@ -33,21 +33,31 @@ This package supports optional configuration.
 You can publish the configuration file using:
 
 ```bash
-php artisan vendor:publish --provider="Kalimeromk\Rssfeed\RssFeedServiceProvider" --tag="config"
+php artisan vendor:publish --provider="Kalimeromk\Rssfeed\RssfeedServiceProvider" --tag="config"
 ```
 
-This will publish a `rssfeed.php` config file to your `config` directory. Here you can set various options for image storage and media handling.
+This will publish a `rssfeed.php` config file to your `config` directory. Here you can set various options for image storage, HTTP behavior, and content extraction.
 
 ```php
 return [
+    // Storage and Spatie settings
     'image_storage_path' => 'images',
     'spatie_media_type' => 'image',
     'spatie_disk' => 'public',
     'spatie_enabled' => false,
+
+    // HTTP options
+    'http_verify_ssl' => true,
+    'http_timeout' => 15,
+    'http_retry_times' => 2,
+    'http_retry_sleep_ms' => 200,
+
+    // Content extraction
     'content_selectors' => [
+        // 'example.com' => '//article',
     ],
-    'default_selector' => '//div[contains(@class, "item-page")]
-                           | //div[contains(@class, "post-content") and contains(@class, "entry-content")]',// Set to true if using Spatie Media Library
+    // See the published config for the full default selector union
+    'default_selector' => '//article | //div[contains(@class, "entry-content")]',
 ];
 ```
 
@@ -61,62 +71,46 @@ return [
 
 ## Usage
 
-Below is an example of how to use this package.
+Below are examples of how to use this package.
 
 ```php
-namespace App\Http\Controllers;
-
+// 1) Get normalized array of items (auto full-content extraction when needed)
 use Kalimeromk\Rssfeed\RssFeed;
-use Illuminate\Http\Request;
 
-class RssFeedController extends Controller
-{
-    public function index()
-    {
-        $feed = RssFeed::parseRssFeeds('https://example.com/feed/');
-        
-        $result = [
-            'title' => $feed->get_title(),
-            'description' => $feed->get_description(),
-            'permalink' => $feed->get_permalink(),
-            'link' => $feed->get_link(),
-            'copyright' => $feed->get_copyright(),
-            'language' => $feed->get_language(),
-            'image_url' => $feed->get_image_url(),
-            'author' => $feed->get_author()
-        ];
-        foreach ($feed->get_items(0, $feed->get_item_quantity()) as $item) {
-            $i['title'] = $item->get_title();
-            $i['description'] = $item->get_description();
-            $i['id'] = $item->get_id();
-            $i['content'] = $item->get_content();
-            $i['thumbnail'] = $item->get_thumbnail() ?: $rssFeed->extractImageFromDescription($item->get_content());
-            $i['category'] = $item->get_category();
-            $i['categories'] = $item->get_categories();
-            $i['author'] = $item->get_author();
-            $i['authors'] = $item->get_authors();
-            $i['date'] = $item->get_date();
-            $i['permalink'] = $item->get_permalink();
-            $i['link'] = $item->get_link();
-            $result['items'][] = $i;
-        }
-        
-        return $result;
-    }
+$rss = app(RssFeed::class);
+$items = $rss->parseRssFeeds('https://example.com/feed/');
+
+foreach ($items as $item) {
+    // $item is an array with keys: title, description, permalink, link, copyright,
+    // author, language, content, categories, date, enclosure
+}
+```
+
+```php
+// 2) Work directly with SimplePie if you need raw feed metadata
+use Kalimeromk\Rssfeed\RssFeed;
+
+$rss = app(RssFeed::class);
+$feed = $rss->RssFeeds('https://example.com/feed/');
+
+$title = $feed->get_title();
+foreach ($feed->get_items() as $item) {
+    // ... use SimplePie\Item API
 }
 ```
 
 ## Saving Images
 
-You can save images found in the RSS feed items using the `saveImagesToStorage` method. This method accepts an array of image URLs and returns an array of saved image names or URLs.
+You can save images found in the RSS feed items using the `saveImagesToStorage` method. This method accepts an array of image URLs and returns an array of saved image names. If Spatie Media Library is enabled and a model is provided, media will be attached to the model's collection.
 
 ### **Using Default Laravel Storage**
-```php  
+```php
 $images = [
     'http://example.com/image1.jpg',
     'http://example.com/image2.jpg',
 ];
-$savedImageNames = $rssFeed->saveImagesToStorage($images);
+$rss = app(\Kalimeromk\Rssfeed\RssFeed::class);
+$savedImageNames = $rss->saveImagesToStorage($images);
 ```
 
 ### **Using Spatie Media Library**
@@ -125,16 +119,15 @@ If you have **Spatie Media Library** enabled and you want to save images to a me
 
 ```php
 use App\Models\Post;
-use Kalimeromk\Rssfeed\RssFeed;
 
-$rssFeed = new RssFeed(app());
-$post = Post::find(1); // Model must implement HasMedia
+$rss = app(\Kalimeromk\Rssfeed\RssFeed::class);
+$post = Post::find(1); // Model should support addMediaFromUrl (Spatie Media Library)
 
 $images = [
     'http://example.com/image1.jpg',
     'http://example.com/image2.jpg',
 ];
-$savedMediaUrls = $rssFeed->saveImagesToStorage($images, $post);
+$savedImageNames = $rss->saveImagesToStorage($images, $post);
 ```
 
 ### **Ensure Your Model Implements Spatie Media Library**
@@ -151,15 +144,7 @@ class Post extends Model implements HasMedia
 
 ## Jobs
 
-If you need to dispatch the RssFeed job, you can do so as follows:
-
-```php
-use Kalimeromk\Rssfeed\Jobs\RssFeedJob;
-
-$feedUrls = ['https://example.com/rss'];
-
-RssFeedJob::dispatch($feedUrls);
-```
+This package does not ship with a built-in Job class. If you need queueing, create a Laravel Job and inject the `RssFeed` service inside it.
 
 ## Credits
 

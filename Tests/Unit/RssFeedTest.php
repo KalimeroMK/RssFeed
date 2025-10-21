@@ -17,9 +17,6 @@ class RssFeedTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        $this->app->register(RssfeedServiceProvider::class);
-
         $this->rssFeed = new RssFeed(app());
     }
 
@@ -79,7 +76,7 @@ class RssFeedTest extends TestCase
     }
 
     /** @test */
-    public function it_extracts_image_from_description()
+    public function it_extracts_image_from_description(): void
     {
         $description = '<p>Some text <img src="https://example.com/image.jpg"  alt=""/> more text</p>';
 
@@ -90,7 +87,7 @@ class RssFeedTest extends TestCase
     }
 
     /** @test */
-    public function it_returns_null_if_no_image_in_description()
+    public function it_returns_null_if_no_image_in_description(): void
     {
         $description = '<p>Some text without an image</p>';
 
@@ -100,7 +97,7 @@ class RssFeedTest extends TestCase
         $this->assertNull($imageUrl);
     }
 
-    public function test_fetches_full_content_from_valid_post_url()
+    public function test_fetches_full_content_from_valid_post_url(): void
     {
         $postUrl = 'http://example.com/post';
         $htmlContent = '<html><body><div class="content">Full content</div></body></html>';
@@ -117,7 +114,7 @@ class RssFeedTest extends TestCase
         $this->assertEquals($expectedContent, $result);
     }
 
-    public function test_returns_empty_string_when_http_request_fails()
+    public function test_returns_empty_string_when_http_request_fails(): void
     {
         $postUrl = 'http://example.com/post';
 
@@ -130,7 +127,7 @@ class RssFeedTest extends TestCase
         $this->assertEquals('', $result);
     }
 
-    public function test_returns_empty_string_when_no_matching_nodes_found()
+    public function test_returns_empty_string_when_no_matching_nodes_found(): void
     {
         $postUrl = 'http://example.com/post';
         $htmlContent = '<html><body><div class="no-content">No content</div></body></html>';
@@ -146,7 +143,7 @@ class RssFeedTest extends TestCase
         $this->assertEquals('', $result);
     }
 
-    public function test_returns_error_message_when_exception_thrown()
+    public function test_returns_error_message_when_exception_thrown(): void
     {
         $postUrl = 'http://example.com/post';
 
@@ -159,7 +156,7 @@ class RssFeedTest extends TestCase
         $this->assertEquals('Error message', $result);
     }
 
-    public function test_content_selectors_for_specific_domain()
+    public function test_content_selectors_for_specific_domain(): void
     {
         $domain = 'example.com';
         $selector = '//div[@class="content"]';

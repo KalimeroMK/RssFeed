@@ -6,8 +6,6 @@ use DOMDocument;
 use DOMXPath;
 use Exception;
 use Illuminate\Contracts\Container\Container;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -15,9 +13,8 @@ use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
 use SimplePie\SimplePie;
 
-class RssFeed implements ShouldQueue
+class RssFeed
 {
-    use Dispatchable;
 
     private Container $app;
 
@@ -56,10 +53,7 @@ class RssFeed implements ShouldQueue
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
 
-        // If additional cURL options are provided, set them
-        if (isset($options['curl_options'])) {
-            $simplePie->set_curl_options($options['curl_options']);
-        }
+        // Additional cURL options can be configured via SimplePie if needed
 
         $simplePie->set_feed_url($url);
         $simplePie->init();
@@ -79,7 +73,7 @@ class RssFeed implements ShouldQueue
      * @param  array  $images  An array of image URLs to download and save.
      * @return array An array of the generated image names.
      */
-    public function saveImagesToStorage(array $images, $model = null): array
+    public function saveImagesToStorage(array $images, ?object $model = null): array
     {
         $savedImageNames = [];
         $imageStoragePath = config('rssfeed.image_storage_path', 'images');
@@ -97,12 +91,12 @@ class RssFeed implements ShouldQueue
                 $extension = $file->extension();
 
                 if (empty($extension)) {
-                    $extension = $this->inferExtension($image, $file->getMimeType());
+                    $extension = $this->inferExtension($image, (string) $file->getMimeType());
                 }
 
                 $imageName = Str::random(15).'.'.$extension;
 
-                if ($spatieEnabled && $model && method_exists($model, 'addMediaFromUrl')) {
+                if ($spatieEnabled && $model && \method_exists($model, 'addMediaFromUrl')) {
                     $media = $model->addMediaFromUrl($image)
                         ->toMediaCollection($spatieMediaType, $spatieDisk);
                 } else {
@@ -130,10 +124,11 @@ class RssFeed implements ShouldQueue
      * @param  string  $mimeType  The MIME type of the file.
      * @return string The inferred file extension.
      */
-    private function inferExtension(string $url, string $mimeType): string
+    private function inferExtension(string $url, ?string $mimeType): string
     {
         // Attempt to infer the extension from the URL
-        $pathInfo = pathinfo(parse_url($url, PHP_URL_PATH));
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+        $pathInfo = pathinfo($path);
         if (isset($pathInfo['extension'])) {
             return $pathInfo['extension'];
         }
@@ -147,7 +142,7 @@ class RssFeed implements ShouldQueue
             // Add more MIME type mappings as needed
         ];
 
-        return $mimeTypeMapping[$mimeType] ?? 'bin'; // Default to 'bin' if MIME type is unknown
+        return $mimeType !== null ? ($mimeTypeMapping[$mimeType] ?? 'bin') : 'bin'; // Default to 'bin' if MIME type is unknown
     }
 
     /**
@@ -185,9 +180,12 @@ class RssFeed implements ShouldQueue
     public function urlExists(string $url): bool
     {
         try {
-            $response = Http::withOptions([
-                'verify' => false, // Skip SSL verification
-                'timeout' => 60, // Increase timeout duration
+            $response = Http::retry(
+                (int) config('rssfeed.http_retry_times', 2),
+                (int) config('rssfeed.http_retry_sleep_ms', 200)
+            )->timeout((int) config('rssfeed.http_timeout', 15))
+            ->withOptions([
+                'verify' => (bool) config('rssfeed.http_verify_ssl', true),
             ])->withHeaders([
                 'User-Agent' => 'Full-Text RSS',
                 'Accept' => 'application/rss+xml, application/xml, text/xml',
@@ -209,21 +207,24 @@ class RssFeed implements ShouldQueue
 
         $parsedItems = [];
 
-        foreach ($feed->get_items() as $item) {
-            $title = $item->get_title();
-            $description = $item->get_description();
-            $permalink = $feed->get_permalink();
+        $items = $feed->get_items() ?? [];
+        foreach ($items as $item) {
+            $title = (string) $item->get_title();
+            $description = (string) $item->get_description();
+            $permalink = (string) $feed->get_permalink();
             $link = $item->get_link();
             $copyright = $item->get_copyright();
             $author = $item->get_author();
-            $language = $item->get_language();
-            $content = $item->get_content();
+            $language = (string) $feed->get_language();
+            $content = (string) $item->get_content();
             $categories = $item->get_categories();
             $date = $item->get_date();
             $enclosure = $item->get_enclosure();
 
             if ($content === $description || strlen(strip_tags($content)) < 200) {
-                $content = $this->fetchFullContentFromPost($link);
+                if (is_string($link)) {
+                    $content = $this->fetchFullContentFromPost($link);
+                }
             }
 
             $parsedItems[] = [
@@ -250,7 +251,13 @@ class RssFeed implements ShouldQueue
     public function fetchFullContentFromPost(string $postUrl): string
     {
         try {
-            $response = Http::get($postUrl);
+            $response = Http::retry(
+                (int) config('rssfeed.http_retry_times', 2),
+                (int) config('rssfeed.http_retry_sleep_ms', 200)
+            )->timeout((int) config('rssfeed.http_timeout', 15))
+            ->withOptions([
+                'verify' => (bool) config('rssfeed.http_verify_ssl', true),
+            ])->get($postUrl);
 
             if ($response->failed()) {
                 return '';
@@ -276,18 +283,20 @@ class RssFeed implements ShouldQueue
             // 3. Use the resolved selector in the XPath query
             $nodes = $xpath->query($selector);
 
-            if ($nodes->length === 0) {
+            if (! $nodes || $nodes->length === 0) {
                 return '';
             }
 
             $fullContent = '';
             foreach ($nodes as $node) {
-                $fullContent .= $dom->saveHTML($node);
+                if ($node instanceof \DOMNode) {
+                    $fullContent .= (string) $dom->saveHTML($node);
+                }
             }
 
             return $fullContent;
         } catch (\Exception $e) {
-            return $e->getMessage();
+            return '';
         }
 
     }

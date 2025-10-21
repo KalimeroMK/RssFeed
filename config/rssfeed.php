@@ -16,6 +16,12 @@ return [
     'spatie_disk' => 'public',
     'spatie_enabled' => false, // Set to true if you want to use Spatie Media Library
 
+    // HTTP client options
+    'http_verify_ssl' => true,
+    'http_timeout' => 15,
+    'http_retry_times' => 2,
+    'http_retry_sleep_ms' => 200,
+
     /*
     |--------------------------------------------------------------------------
     | Domain-Specific XPath Selectors

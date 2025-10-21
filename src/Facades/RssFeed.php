@@ -16,6 +16,6 @@ class RssFeed extends Facade
      */
     protected static function getFacadeAccessor()
     {
-        return \Kalimeromk\Rssfeed\RssFeed::class;
+        return 'rssfeed';
     }
 }

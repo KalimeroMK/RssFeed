@@ -31,12 +31,12 @@ class RssfeedServiceProvider extends ServiceProvider
      */
     private function registerConfig(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/rssfeed.php', 'image_storage_path');
+        $this->mergeConfigFrom(__DIR__.'/../config/rssfeed.php', 'rssfeed');
     }
 
     private function registerFacade(): void
     {
-        $this->app->bind('rssfeed', function ($app): \Kalimeromk\Rssfeed\RssFeed {
+        $this->app->singleton('rssfeed', function ($app): \Kalimeromk\Rssfeed\RssFeed {
             return new RssFeed($app);
         });
     }
