@@ -156,6 +156,18 @@ class RssFeed
      */
     public function extractImageFromDescription(string $content): ?string
     {
+        $tagPatterns = [
+            '/<enclosure\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
+            '/<media:content\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
+            '/<media:thumbnail\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
+        ];
+
+        foreach ($tagPatterns as $pattern) {
+            if (preg_match($pattern, $content, $image)) {
+                return $image['src'];
+            }
+        }
+
         if (preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content, $image)) {
             return $image['src'];
         }

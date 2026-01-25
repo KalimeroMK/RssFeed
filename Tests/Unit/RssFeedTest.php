@@ -87,6 +87,39 @@ class RssFeedTest extends TestCase
     }
 
     /** @test */
+    public function it_extracts_image_from_enclosure_tag(): void
+    {
+        $description = '<enclosure url="https://example.com/enclosure.jpg" length="123" type="image/jpeg" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description);
+
+        $this->assertEquals('https://example.com/enclosure.jpg', $imageUrl);
+    }
+
+    /** @test */
+    public function it_extracts_image_from_media_content_tag(): void
+    {
+        $description = '<media:content url="https://example.com/media-content.jpg" type="image/jpeg" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description);
+
+        $this->assertEquals('https://example.com/media-content.jpg', $imageUrl);
+    }
+
+    /** @test */
+    public function it_extracts_image_from_media_thumbnail_tag(): void
+    {
+        $description = '<media:thumbnail url="https://example.com/media-thumb.jpg" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description);
+
+        $this->assertEquals('https://example.com/media-thumb.jpg', $imageUrl);
+    }
+
+    /** @test */
     public function it_returns_null_if_no_image_in_description(): void
     {
         $description = '<p>Some text without an image</p>';
