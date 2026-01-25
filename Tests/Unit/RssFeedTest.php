@@ -130,6 +130,39 @@ class RssFeedTest extends TestCase
         $this->assertNull($imageUrl);
     }
 
+    /** @test */
+    public function it_extracts_image_from_img_srcset(): void
+    {
+        $description = '<img srcset="https://example.com/small.jpg 320w, https://example.com/large.jpg 640w" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description);
+
+        $this->assertEquals('https://example.com/large.jpg', $imageUrl);
+    }
+
+    /** @test */
+    public function it_extracts_image_from_img_data_src(): void
+    {
+        $description = '<img data-src="https://example.com/lazy.jpg" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description);
+
+        $this->assertEquals('https://example.com/lazy.jpg', $imageUrl);
+    }
+
+    /** @test */
+    public function it_resolves_relative_image_url_with_base(): void
+    {
+        $description = '<img src="/images/cover.jpg" />';
+
+        $rssFeed = new RssFeed(app());
+        $imageUrl = $rssFeed->extractImageFromDescription($description, 'https://example.com/posts/1');
+
+        $this->assertEquals('https://example.com/images/cover.jpg', $imageUrl);
+    }
+
     public function test_fetches_full_content_from_valid_post_url(): void
     {
         $postUrl = 'http://example.com/post';

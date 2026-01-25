@@ -154,25 +154,247 @@ class RssFeed
      * @param  string  $content  The HTML description from which to extract the image source URL.
      * @return string|null The extracted image source URL, or null if no <img> tag is found.
      */
-    public function extractImageFromDescription(string $content): ?string
+    public function extractImageFromDescription(string $content, ?string $baseUrl = null): ?string
     {
-        $tagPatterns = [
-            '/<enclosure\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
-            '/<media:content\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
-            '/<media:thumbnail\b[^>]*\burl=[\'"](?P<src>[^\'"]+)[\'"][^>]*>/i',
-        ];
+        $tagImages = $this->extractImagesFromTagString($content);
+        if (! empty($tagImages)) {
+            return $tagImages[0];
+        }
 
-        foreach ($tagPatterns as $pattern) {
-            if (preg_match($pattern, $content, $image)) {
-                return $image['src'];
+        $htmlImages = $this->extractImagesFromHtml($content, $baseUrl);
+
+        return $htmlImages[0] ?? null;
+    }
+
+    /**
+     * Extracts image URLs from a SimplePie item (enclosures, Media RSS, and HTML).
+     */
+    public function extractImagesFromItem(object $item): array
+    {
+        $images = [];
+        $baseUrl = method_exists($item, 'get_link') ? (string) $item->get_link() : null;
+
+        if (method_exists($item, 'get_enclosures')) {
+            $enclosures = $item->get_enclosures() ?? [];
+            foreach ($enclosures as $enclosure) {
+                if (! is_object($enclosure)) {
+                    continue;
+                }
+                $type = method_exists($enclosure, 'get_type') ? (string) $enclosure->get_type() : null;
+                if ($type && ! $this->isLikelyImageType($type)) {
+                    continue;
+                }
+                $url = null;
+                if (method_exists($enclosure, 'get_link')) {
+                    $url = $enclosure->get_link();
+                } elseif (method_exists($enclosure, 'get_url')) {
+                    $url = $enclosure->get_url();
+                }
+                $this->addImageUrl($images, $this->resolveUrl((string) $url, $baseUrl), $type);
             }
         }
 
-        if (preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content, $image)) {
-            return $image['src'];
+        $images = array_merge($images, $this->extractImagesFromMediaRss($item, $baseUrl));
+
+        $content = method_exists($item, 'get_content') ? (string) $item->get_content() : '';
+        $description = method_exists($item, 'get_description') ? (string) $item->get_description() : '';
+        $images = array_merge($images, $this->extractImagesFromHtml($content, $baseUrl));
+        $images = array_merge($images, $this->extractImagesFromHtml($description, $baseUrl));
+
+        return array_values(array_unique(array_filter($images)));
+    }
+
+    private function extractImagesFromMediaRss(object $item, ?string $baseUrl): array
+    {
+        $images = [];
+        if (! method_exists($item, 'get_item_tags')) {
+            return $images;
         }
 
-        return null;
+        $namespace = 'http://search.yahoo.com/mrss/';
+        foreach (['content', 'thumbnail'] as $tag) {
+            $tags = $item->get_item_tags($namespace, $tag) ?? [];
+            foreach ($tags as $tagData) {
+                $attribs = $tagData['attribs'][''] ?? [];
+                $url = $attribs['url'] ?? null;
+                $type = $attribs['type'] ?? null;
+                $this->addImageUrl($images, $this->resolveUrl((string) $url, $baseUrl), $type);
+            }
+        }
+
+        return $images;
+    }
+
+    private function extractImagesFromTagString(string $content): array
+    {
+        $images = [];
+        foreach (['enclosure', 'media:content', 'media:thumbnail'] as $tagName) {
+            if (preg_match_all('/<'.$tagName.'\b[^>]*>/i', $content, $matches)) {
+                foreach ($matches[0] as $tag) {
+                    $attrs = $this->parseTagAttributes($tag);
+                    $url = $attrs['url'] ?? null;
+                    $type = $attrs['type'] ?? null;
+                    $this->addImageUrl($images, (string) $url, $type);
+                }
+            }
+        }
+
+        return array_values(array_unique(array_filter($images)));
+    }
+
+    private function parseTagAttributes(string $tag): array
+    {
+        $attrs = [];
+        if (preg_match_all('/([a-zA-Z0-9:_-]+)\s*=\s*([\'"])(.*?)\2/', $tag, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $attrs[strtolower($match[1])] = $match[3];
+            }
+        }
+
+        return $attrs;
+    }
+
+    private function extractImagesFromHtml(string $html, ?string $baseUrl): array
+    {
+        $images = [];
+        if (trim($html) === '') {
+            return $images;
+        }
+
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument;
+        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+        libxml_clear_errors();
+
+        $tags = $dom->getElementsByTagName('img');
+        foreach ($tags as $tag) {
+            if (! $tag instanceof \DOMElement) {
+                continue;
+            }
+            $src = $tag->getAttribute('src');
+            $dataSrc = $tag->getAttribute('data-src');
+            $dataOriginal = $tag->getAttribute('data-original');
+            $srcset = $tag->getAttribute('srcset');
+            $dataSrcset = $tag->getAttribute('data-srcset');
+
+            $candidate = $this->parseSrcset($srcset ?: $dataSrcset) ?: ($src ?: $dataSrc ?: $dataOriginal);
+            $this->addImageUrl($images, $this->resolveUrl($candidate, $baseUrl), 'image/unknown');
+        }
+
+        return array_values(array_unique(array_filter($images)));
+    }
+
+    private function parseSrcset(?string $srcset): ?string
+    {
+        if (! $srcset) {
+            return null;
+        }
+
+        $bestUrl = null;
+        $bestScore = -1;
+        $candidates = array_map('trim', explode(',', $srcset));
+        foreach ($candidates as $candidate) {
+            if ($candidate === '') {
+                continue;
+            }
+            $parts = preg_split('/\s+/', $candidate);
+            $url = $parts[0] ?? null;
+            $descriptor = $parts[1] ?? '';
+            $score = 1;
+            if ($this->endsWith($descriptor, 'w')) {
+                $score = (int) rtrim($descriptor, 'w');
+            } elseif ($this->endsWith($descriptor, 'x')) {
+                $score = (int) (float) rtrim($descriptor, 'x');
+            }
+            if ($url && $score >= $bestScore) {
+                $bestUrl = $url;
+                $bestScore = $score;
+            }
+        }
+
+        return $bestUrl;
+    }
+
+    private function resolveUrl(?string $url, ?string $baseUrl): ?string
+    {
+        if (! $url) {
+            return null;
+        }
+        if ($this->startsWith($url, 'data:')) {
+            return null;
+        }
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+        if ($this->startsWith($url, '//')) {
+            $scheme = parse_url((string) $baseUrl, PHP_URL_SCHEME) ?: 'https';
+            return $scheme.':'.$url;
+        }
+        if (! $baseUrl) {
+            return $url;
+        }
+        $baseParts = parse_url($baseUrl);
+        if (empty($baseParts['scheme']) || empty($baseParts['host'])) {
+            return $url;
+        }
+        $scheme = $baseParts['scheme'];
+        $host = $baseParts['host'];
+        $basePath = $baseParts['path'] ?? '/';
+        $baseDir = rtrim(str_replace('\\', '/', dirname($basePath)), '/');
+
+        if ($this->startsWith($url, '/')) {
+            return $scheme.'://'.$host.$url;
+        }
+
+        return $scheme.'://'.$host.$baseDir.'/'.$url;
+    }
+
+    private function isAllowedImageExtension(string $extension): bool
+    {
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg'];
+
+        return in_array(strtolower($extension), $allowed, true);
+    }
+
+    private function isLikelyImageUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return $extension !== '' && $this->isAllowedImageExtension($extension);
+    }
+
+    private function isLikelyImageType(string $type): bool
+    {
+        return $this->startsWith(strtolower($type), 'image/');
+    }
+
+    private function startsWith(string $haystack, string $needle): bool
+    {
+        return $needle === '' || strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+
+    private function endsWith(string $haystack, string $needle): bool
+    {
+        if ($needle === '') {
+            return true;
+        }
+
+        return substr($haystack, -strlen($needle)) === $needle;
+    }
+
+    private function addImageUrl(array &$images, ?string $url, ?string $type): void
+    {
+        if (! $url) {
+            return;
+        }
+        if ($type && ! $this->isLikelyImageType($type)) {
+            return;
+        }
+        if (! $this->isLikelyImageUrl($url) && $type === null) {
+            return;
+        }
+        $images[] = $url;
     }
 
     /**
@@ -232,6 +454,7 @@ class RssFeed
             $categories = $item->get_categories();
             $date = $item->get_date();
             $enclosure = $item->get_enclosure();
+            $images = $this->extractImagesFromItem($item);
 
             if ($content === $description || strlen(strip_tags($content)) < 200) {
                 if (is_string($link)) {
@@ -251,6 +474,8 @@ class RssFeed
                 'categories' => $categories,
                 'date' => $date,
                 'enclosure' => $enclosure,
+                'images' => $images,
+                'image' => $images[0] ?? null,
             ];
         }
 

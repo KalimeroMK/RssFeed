@@ -82,7 +82,7 @@ $items = $rss->parseRssFeeds('https://example.com/feed/');
 
 foreach ($items as $item) {
     // $item is an array with keys: title, description, permalink, link, copyright,
-    // author, language, content, categories, date, enclosure
+    // author, language, content, categories, date, enclosure, images, image
 }
 ```
 
@@ -102,6 +102,13 @@ foreach ($feed->get_items() as $item) {
 ## Saving Images
 
 You can save images found in the RSS feed items using the `saveImagesToStorage` method. This method accepts an array of image URLs and returns an array of saved image names. If Spatie Media Library is enabled and a model is provided, media will be attached to the model's collection.
+
+You can also extract image URLs directly from a SimplePie item using:
+
+```php
+$images = $rss->extractImagesFromItem($item);
+$primaryImage = $images[0] ?? null;
+```
 
 ### **Using Default Laravel Storage**
 ```php
