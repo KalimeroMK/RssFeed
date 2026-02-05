@@ -483,7 +483,31 @@ class RssFeed
     }
 
     /**
+     * Parse RSS feeds and extract clean text content.
+     * This method is similar to parseRssFeeds but returns clean text
+     * without HTML, ads, donation forms, etc.
+     */
+    public function parseRssFeedsClean(string $url): array
+    {
+        $items = $this->parseRssFeeds($url);
+        
+        foreach ($items as &$item) {
+            // Extract clean text from HTML content
+            if (! empty($item['content'])) {
+                $item['content'] = $this->extractTextContent($item['content']);
+            }
+            // Also clean up description
+            if (! empty($item['description'])) {
+                $item['description'] = $this->extractTextContent($item['description']);
+            }
+        }
+        
+        return $items;
+    }
+
+    /**
      * Fetches the full content from a post URL using a domain-specific XPath selector.
+     * Removes unwanted elements (donations, ads, etc.) and extracts clean text.
      */
     public function fetchFullContentFromPost(string $postUrl): string
     {
@@ -510,14 +534,17 @@ class RssFeed
 
             $xpath = new DOMXPath($dom);
 
-            // 1. Extract just the host/domain from the URL
+            // 1. Remove unwanted elements first
+            $this->removeUnwantedElements($dom, $xpath);
+
+            // 2. Extract just the host/domain from the URL
             $domain = parse_url($postUrl, PHP_URL_HOST);
 
-            // 2. Fetch the selector from config; if not found, use the default
+            // 3. Fetch the selector from config; if not found, use the default
             $selectors = config('rssfeed.content_selectors', []);
             $selector = $selectors[$domain] ?? config('rssfeed.default_selector');
 
-            // 3. Use the resolved selector in the XPath query
+            // 4. Use the resolved selector in the XPath query
             $nodes = $xpath->query($selector);
 
             if (! $nodes || $nodes->length === 0) {
@@ -535,6 +562,173 @@ class RssFeed
         } catch (\Exception $e) {
             return '';
         }
+    }
 
+    /**
+     * Fetches clean text content from a post URL.
+     * Removes unwanted elements and extracts only the article text.
+     */
+    public function fetchCleanTextFromPost(string $postUrl): string
+    {
+        $html = $this->fetchFullContentFromPost($postUrl);
+        return $this->extractTextContent($html);
+    }
+
+    /**
+     * Remove unwanted elements from DOM before content extraction.
+     */
+    private function removeUnwantedElements(DOMDocument $dom, DOMXPath $xpath): void
+    {
+        $removeSelectors = config('rssfeed.remove_selectors', []);
+        
+        foreach ($removeSelectors as $selector) {
+            $xpathExpr = $this->cssSelectorToXPath($selector);
+            $nodes = $xpath->query($xpathExpr);
+            
+            if ($nodes) {
+                foreach ($nodes as $node) {
+                    if ($node instanceof \DOMNode && $node->parentNode) {
+                        $node->parentNode->removeChild($node);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Convert simple CSS selector to XPath.
+     * Supports: .class, #id, tag, [attr], [attr=value], tag.class
+     */
+    private function cssSelectorToXPath(string $selector): string
+    {
+        $selector = trim($selector);
+        
+        // Handle attribute contains selector [class*="value"]
+        if (preg_match('/^\[(\w+)\*="([^"]+)"\]$/', $selector, $matches)) {
+            return "//*[contains(@{$matches[1]}, '{$matches[2]}')]";
+        }
+        
+        // Handle attribute selector [attr=value]
+        if (preg_match('/^\[(\w+)="([^"]+)"\]$/', $selector, $matches)) {
+            return "//*[@{$matches[1]}='{$matches[2]}']";
+        }
+        
+        // Handle ID selector #id
+        if (substr($selector, 0, 1) === '#') {
+            $id = substr($selector, 1);
+            return "//*[@id='{$id}']";
+        }
+        
+        // Handle class selector .class
+        if (substr($selector, 0, 1) === '.'){
+            $class = substr($selector, 1);
+            return "//*[contains(@class, '{$class}')]";
+        }
+        
+        // Handle tag.class
+        if (strpos($selector, '.') !== false) {
+            list($tag, $class) = explode('.', $selector, 2);
+            return "//{$tag}[contains(@class, '{$class}')]";
+        }
+        
+        // Handle tag#id
+        if (strpos($selector, '#') !== false) {
+            list($tag, $id) = explode('#', $selector, 2);
+            return "//{$tag}[@id='{$id}']";
+        }
+        
+        // Default: tag name
+        return "//{$selector}";
+    }
+
+    /**
+     * Extract clean text content from HTML.
+     * Removes scripts, styles, and normalizes whitespace.
+     */
+    private function extractTextContent(string $html): string
+    {
+        if (empty($html)) {
+            return '';
+        }
+
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument;
+        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+        libxml_clear_errors();
+
+        // Remove script and style elements
+        $xpath = new DOMXPath($dom);
+        $scripts = $xpath->query('//script|//style|//noscript|//iframe|//embed|//object');
+        foreach ($scripts as $script) {
+            if ($script->parentNode) {
+                $script->parentNode->removeChild($script);
+            }
+        }
+
+        // Get text content
+        $text = $dom->textContent;
+        
+        // Normalize whitespace
+        $text = preg_replace('/\s+/', ' ', $text);
+        $text = trim($text);
+        
+        // Remove common donation/payment text patterns
+        $text = $this->removeDonationTextPatterns($text);
+        
+        return $text;
+    }
+
+    /**
+     * Remove common donation and payment text patterns.
+     */
+    private function removeDonationTextPatterns(string $text): string
+    {
+        $patterns = [
+            // Bulgarian donation patterns (from your example)
+            '/дарител/is',
+            '/Donation Amount/is',
+            '/Превод от чужд език/is',
+            '/Авторски хонорар/is',
+            '/Такса за поддръжка/is',
+            '/Избрана от Вас сума/is',
+            '/Дарете сега/is',
+            '/Donation Total/is',
+            '/Споделете/is',
+            
+            // English donation patterns
+            '/donate now/i',
+            '/make a donation/i',
+            '/support us/i',
+            '/become a patron/i',
+            '/donation amount/i',
+            '/credit card info/i',
+            '/secure ssl encrypted payment/i',
+            '/select payment method/i',
+            '/personal info/i',
+            '/first name/i',
+            '/last name/i',
+            '/email address/i',
+            '/make this an anonymous donation/i',
+            '/donation total/i',
+            
+            // Newsletter patterns
+            '/subscribe to our newsletter/i',
+            '/sign up for our newsletter/i',
+            '/newsletter signup/i',
+            '/email newsletter/i',
+            
+            // Generic patterns
+            '/\d+\.\d{2}€/',
+            '/\$\d+\.\d{2}/',
+        ];
+        
+        foreach ($patterns as $pattern) {
+            $text = preg_replace($pattern, '', $text);
+        }
+        
+        // Clean up extra whitespace
+        $text = preg_replace('/\s+/', ' ', $text);
+        
+        return trim($text);
     }
 }

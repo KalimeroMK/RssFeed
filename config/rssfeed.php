@@ -37,6 +37,60 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Remove Selectors (Content Cleanup)
+    |--------------------------------------------------------------------------
+    |
+    | CSS selectors for elements to remove before extracting article text.
+    | These typically include donation forms, ads, sharing buttons, comments,
+    | sidebars, and other non-content elements that appear within articles.
+    |
+    */
+    'remove_selectors' => [
+        // Donation forms and payment
+        '.donation-form', '.donate-form', '.donate-box', '.donation-box',
+        '[class*="donate"]', '[id*="donate"]', '[class*="donation"]', '[id*="donation"]',
+        '.patreon', '.paypal', '.stripe-payment', '.payment-form',
+        
+        // Social sharing
+        '.share-buttons', '.social-share', '.sharing-buttons', '.share-box',
+        '[class*="share"]', '[class*="social"]', '.addthis', '.addtoany',
+        
+        // Comments
+        '.comments', '#comments', '.comment-section', '.comment-form',
+        '[class*="comment"]', '.disqus', '#disqus_thread',
+        
+        // Ads and promotions
+        '.ad', '.ads', '.advertisement', '.promo', '.promotion',
+        '[class*="advert"]', '[id*="ad-"]', '.sponsored', '.affiliate',
+        
+        // Sidebars and widgets
+        '.sidebar', '.widget', '.widgets', '#sidebar', '[class*="widget"]',
+        
+        // Navigation within content
+        '.nav', '.navigation', '.menu', '.breadcrumb', '.breadcrumbs',
+        '.pagination', '.next-prev', '.post-nav',
+        
+        // Footers and headers within article
+        '.entry-footer', '.post-footer', '.article-footer',
+        '.entry-meta', '.post-meta', '.meta-info', '.byline',
+        '.author-box', '.author-info', '.bio',
+        
+        // Related posts
+        '.related-posts', '.related-articles', '.read-more', '.see-also',
+        '[class*="related"]', '.you-may-like',
+        
+        // Newsletter signup
+        '.newsletter', '.subscribe', '.subscription', '.mailchimp',
+        '[class*="newsletter"]', '[class*="subscribe"]',
+        
+        // Other non-content
+        '.tags', '.tag-cloud', '.categories-list', '.post-tags',
+        '.print-button', '.pdf-button', '.download-button',
+        '.vote', '.rating', '.thumbs-up',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Default Selector
     |--------------------------------------------------------------------------
     |

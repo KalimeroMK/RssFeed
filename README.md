@@ -1,13 +1,16 @@
 # RssFeed Laravel Package
 
-This package provides an easy way to parse RSS feeds and save them into your application. It offers features like fetching the entire content of an RSS feed, saving images found in the feed items, and getting the full content of each item in the feed.
+This package provides an easy way to parse RSS feeds and save them into your application. It offers features like fetching the entire content of an RSS feed, saving images found in the feed items, getting the full content of each item in the feed, and extracting clean text without ads, donation forms, or other unwanted content.
 
 ## Features
 
 1. Parses multiple RSS feeds.
 2. Saves images in the RSS feed items to a storage location.
 3. Retrieves the full content of each item in the RSS feed.
-4. Supports **Spatie Media Library** for storing images.
+4. **Extracts clean text content** - Removes donation forms, ads, social sharing buttons, and other unwanted elements.
+5. Supports **Spatie Media Library** for storing images.
+6. Configurable content selectors per domain.
+7. Automatic removal of unwanted HTML elements before content extraction.
 
 ## Requirements
 
@@ -52,12 +55,19 @@ return [
     'http_retry_times' => 2,
     'http_retry_sleep_ms' => 200,
 
-    // Content extraction
+    // Content extraction selectors per domain
     'content_selectors' => [
         // 'example.com' => '//article',
     ],
-    // See the published config for the full default selector union
-    'default_selector' => '//article | //div[contains(@class, "entry-content")]',
+    
+    // Default selector for content extraction
+    'default_selector' => '//article | //div[contains(@class, "entry-content")] | ...',
+    
+    // Selectors for elements to remove (ads, donations, etc.)
+    'remove_selectors' => [
+        '.donation-form', '.donate-box', '.share-buttons',
+        '.comments', '.ad', '.sidebar', // ... and more
+    ],
 ];
 ```
 
@@ -68,13 +78,15 @@ return [
 * `spatie_enabled`: Set to `true` if you want to store images using Spatie Media Library.
 * `default_selector`: The default selector to use when extracting the full content of an RSS feed item.
 * `content_selectors`: Here you can map specific domains to custom XPath selectors for fetching full content from a post. If the post URL belongs to one of these domains, its selector will be used.
+* `remove_selectors`: CSS selectors for elements to remove before extracting content (donation forms, ads, social sharing, comments, etc.).
 
 ## Usage
 
 Below are examples of how to use this package.
 
+### 1) Parse RSS feed with full HTML content
+
 ```php
-// 1) Get normalized array of items (auto full-content extraction when needed)
 use Kalimeromk\Rssfeed\RssFeed;
 
 $rss = app(RssFeed::class);
@@ -83,11 +95,51 @@ $items = $rss->parseRssFeeds('https://example.com/feed/');
 foreach ($items as $item) {
     // $item is an array with keys: title, description, permalink, link, copyright,
     // author, language, content, categories, date, enclosure, images, image
+    echo $item['title'];
+    echo $item['content']; // Full HTML content
 }
 ```
 
+### 2) Parse RSS feed with clean text content (no ads/donations)
+
 ```php
-// 2) Work directly with SimplePie if you need raw feed metadata
+use Kalimeromk\Rssfeed\RssFeed;
+
+$rss = app(RssFeed::class);
+$items = $rss->parseRssFeedsClean('https://example.com/feed/');
+
+foreach ($items as $item) {
+    echo $item['title'];
+    echo $item['content']; // Clean text without HTML, ads, donation forms
+    echo $item['description']; // Also cleaned up
+}
+```
+
+The `parseRssFeedsClean()` method automatically:
+- Removes donation forms and payment sections
+- Removes social sharing buttons
+- Removes advertisements
+- Removes comments sections
+- Extracts plain text from HTML
+- Removes common donation text patterns
+
+### 3) Fetch clean text from a single post URL
+
+```php
+use Kalimeromk\Rssfeed\RssFeed;
+
+$rss = app(RssFeed::class);
+
+// Get full HTML content
+$htmlContent = $rss->fetchFullContentFromPost('https://example.com/article/123');
+
+// Get clean text content (recommended)
+$cleanText = $rss->fetchCleanTextFromPost('https://example.com/article/123');
+```
+
+### 4) Work directly with SimplePie
+
+```php
 use Kalimeromk\Rssfeed\RssFeed;
 
 $rss = app(RssFeed::class);
@@ -147,6 +199,36 @@ class Post extends Model implements HasMedia
 {
     use InteractsWithMedia;
 }
+```
+
+## Advanced Configuration
+
+### Custom Content Selectors per Domain
+
+If you need to extract content from specific websites with unique HTML structure:
+
+```php
+// config/rssfeed.php
+'content_selectors' => [
+    'example.com' => '//div[@class="article-body"]',
+    'news.site.com' => '//article[contains(@class, "main-content")]',
+],
+```
+
+### Custom Remove Selectors
+
+Add your own selectors for elements to remove:
+
+```php
+// config/rssfeed.php
+'remove_selectors' => [
+    // Default selectors...
+    
+    // Your custom selectors
+    '.custom-ad-banner',
+    '#newsletter-signup',
+    '.site-specific-donation',
+],
 ```
 
 ## Jobs
