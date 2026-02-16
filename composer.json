@@ -1,10 +1,15 @@
 {
     "name": "kalimeromk/rssfeed",
-    "description": "A simple RSS feed reader for Laravel",
+    "description": "Full-Text RSS extraction package for Laravel - converts partial RSS feeds to full content",
     "type": "package",
     "license": "MIT",
     "keywords": [
-        "laravel"
+        "laravel",
+        "rss",
+        "feed",
+        "full-text",
+        "readability",
+        "content-extraction"
     ],
     "authors": [
         {
@@ -33,13 +38,16 @@
         }
     },
     "require": {
-        "php": ">=7.4",
-        "illuminate/support": "~5.5.0|~5.6.0|~5.7.0|~5.8.0|^6.0|^7.0|^8.0|^9.0|^10.0|^11.0|^12.0",
+        "php": ">=8.0",
+        "illuminate/support": "^9.0|^10.0|^11.0|^12.0",
         "simplepie/simplepie": "^1.8.0",
+        "masterminds/html5": "^2.8",
+        "ezyang/htmlpurifier": "^4.17",
         "ext-curl": "*",
         "ext-libxml": "*",
         "ext-dom": "*",
-        "spatie/laravel-medialibrary": "^7.0|^8.0|^9.0|^10.0|^11.0"
+        "ext-mbstring": "*",
+        "spatie/laravel-medialibrary": "^10.0|^11.0"
     },
     "require-dev": {
         "orchestra/testbench": "^9",

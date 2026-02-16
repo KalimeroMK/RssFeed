@@ -1,244 +1,271 @@
-# RssFeed Laravel Package
+# Laravel Full-Text RSS Package
 
-This package provides an easy way to parse RSS feeds and save them into your application. It offers features like fetching the entire content of an RSS feed, saving images found in the feed items, getting the full content of each item in the feed, and extracting clean text without ads, donation forms, or other unwanted content.
+[![PHP Version](https://img.shields.io/badge/PHP-8.0+-blue.svg)](https://php.net)
+[![Laravel Version](https://img.shields.io/badge/Laravel-9.0+-orange.svg)](https://laravel.com)
 
-## Features
+A comprehensive RSS feed processing package for Laravel that extracts full-text content from RSS/Atom feeds. This package ports the powerful Full-Text RSS functionality from the original FiveFilters project to Laravel.
 
-1. Parses multiple RSS feeds.
-2. Saves images in the RSS feed items to a storage location.
-3. Retrieves the full content of each item in the RSS feed.
-4. **Extracts clean text content** - Removes donation forms, ads, social sharing buttons, and other unwanted elements.
-5. Supports **Spatie Media Library** for storing images.
-6. Configurable content selectors per domain.
-7. Automatic removal of unwanted HTML elements before content extraction.
+## ✨ Features
 
-## Requirements
+- 📰 **Full-Text Extraction** - Converts partial RSS feeds to complete articles
+- 🤖 **Readability Algorithm** - Automatically detects main content using the Arc90 Readability algorithm
+- 🌐 **Site Configs** - 1679+ site-specific configurations for better extraction
+- 🖼️ **Image Processing** - Extracts and saves images with Spatie Media Library support
+- 🔍 **Language Detection** - Automatically detects article language
+- 🧹 **HTML Sanitization** - XSS filtering and inline style removal
+- 📄 **Multi-Page Support** - Handles articles split across multiple pages
+- 📝 **Multiple Output Formats** - RSS 2.0, Atom, and JSON Feed formats
+- 🔐 **Security** - API key validation, domain whitelist/blacklist
+- 💾 **Caching** - Built-in cache support via Laravel Cache
+- ⚡ **Modern PHP** - Type-safe with PHP 8.0+ features
 
-* PHP 7.4 or higher
-* Laravel 5.5 or higher
-* SimplePie PHP library 1.8 or higher
-* Optional: Spatie Media Library (if enabled for image storage)
-
-## Installation
-
-You can install this package via Composer using:
+## 📦 Installation
 
 ```bash
 composer require kalimeromk/rssfeed
 ```
 
-This package uses Laravel's auto-discovery feature, so you don't need to register the service provider.
-
-## Configuration
-
-This package supports optional configuration.
-
-You can publish the configuration file using:
+### Publish Configuration
 
 ```bash
-php artisan vendor:publish --provider="Kalimeromk\Rssfeed\RssfeedServiceProvider" --tag="config"
+php artisan vendor:publish --tag=config
 ```
 
-This will publish a `rssfeed.php` config file to your `config` directory. Here you can set various options for image storage, HTTP behavior, and content extraction.
+### Publish Site Configs (Optional)
+
+```bash
+php artisan vendor:publish --tag=site-configs
+```
+
+## ⚙️ Configuration
+
+The configuration file is located at `config/rssfeed.php`:
 
 ```php
 return [
-    // Storage and Spatie settings
-    'image_storage_path' => 'images',
-    'spatie_media_type' => 'image',
-    'spatie_disk' => 'public',
-    'spatie_enabled' => false,
+    // Enable/disable the service
+    'enabled' => true,
 
-    // HTTP options
-    'http_verify_ssl' => true,
-    'http_timeout' => 15,
-    'http_retry_times' => 2,
-    'http_retry_sleep_ms' => 200,
+    // Security settings
+    'key_required' => false,
+    'api_keys' => [],
+    'allowed_hosts' => [],
+    'blocked_hosts' => [],
 
-    // Content extraction selectors per domain
-    'content_selectors' => [
-        // 'example.com' => '//article',
-    ],
-    
-    // Default selector for content extraction
-    'default_selector' => '//article | //div[contains(@class, "entry-content")] | ...',
-    
-    // Selectors for elements to remove (ads, donations, etc.)
-    'remove_selectors' => [
-        '.donation-form', '.donate-box', '.share-buttons',
-        '.comments', '.ad', '.sidebar', // ... and more
-    ],
+    // Feature toggles
+    'singlepage_enabled' => true,
+    'multipage_enabled' => true,
+    'caching_enabled' => false,
+    'xss_filter_enabled' => false,
+    'detect_language' => true,
+
+    // Cache settings
+    'cache_time' => 10, // minutes
+
+    // HTML parser settings
+    'html_parser' => 'html5php', // or 'libxml'
 ];
 ```
 
-### Configuration Options:
-* `image_storage_path`: Specifies the path where images from RSS feed items should be stored (if not using Spatie Media Library).
-* `spatie_media_type`: Defines the media collection type when using Spatie Media Library.
-* `spatie_disk`: Specifies which Laravel storage disk to use.
-* `spatie_enabled`: Set to `true` if you want to store images using Spatie Media Library.
-* `default_selector`: The default selector to use when extracting the full content of an RSS feed item.
-* `content_selectors`: Here you can map specific domains to custom XPath selectors for fetching full content from a post. If the post URL belongs to one of these domains, its selector will be used.
-* `remove_selectors`: CSS selectors for elements to remove before extracting content (donation forms, ads, social sharing, comments, etc.).
+## 🚀 Usage
 
-## Usage
-
-Below are examples of how to use this package.
-
-### 1) Parse RSS feed with full HTML content
+### Basic RSS Feed Parsing
 
 ```php
-use Kalimeromk\Rssfeed\RssFeed;
+use RssFeed;
 
-$rss = app(RssFeed::class);
-$items = $rss->parseRssFeeds('https://example.com/feed/');
+// Parse RSS feed
+$feed = RssFeed::RssFeeds('https://example.com/feed.xml');
 
-foreach ($items as $item) {
-    // $item is an array with keys: title, description, permalink, link, copyright,
-    // author, language, content, categories, date, enclosure, images, image
-    echo $item['title'];
-    echo $item['content']; // Full HTML content
-}
-```
-
-### 2) Parse RSS feed with clean text content (no ads/donations)
-
-```php
-use Kalimeromk\Rssfeed\RssFeed;
-
-$rss = app(RssFeed::class);
-$items = $rss->parseRssFeedsClean('https://example.com/feed/');
-
-foreach ($items as $item) {
-    echo $item['title'];
-    echo $item['content']; // Clean text without HTML, ads, donation forms
-    echo $item['description']; // Also cleaned up
-}
-```
-
-The `parseRssFeedsClean()` method automatically:
-- Removes donation forms and payment sections
-- Removes social sharing buttons
-- Removes advertisements
-- Removes comments sections
-- Extracts plain text from HTML
-- Removes common donation text patterns
-
-### 3) Fetch clean text from a single post URL
-
-```php
-use Kalimeromk\Rssfeed\RssFeed;
-
-$rss = app(RssFeed::class);
-
-// Get full HTML content
-$htmlContent = $rss->fetchFullContentFromPost('https://example.com/article/123');
-
-// Get clean text content (recommended)
-$cleanText = $rss->fetchCleanTextFromPost('https://example.com/article/123');
-```
-
-### 4) Work directly with SimplePie
-
-```php
-use Kalimeromk\Rssfeed\RssFeed;
-
-$rss = app(RssFeed::class);
-$feed = $rss->RssFeeds('https://example.com/feed/');
-
-$title = $feed->get_title();
+// Get feed items
 foreach ($feed->get_items() as $item) {
-    // ... use SimplePie\Item API
+    echo $item->get_title();
+    echo $item->get_description();
 }
 ```
 
-## Saving Images
-
-You can save images found in the RSS feed items using the `saveImagesToStorage` method. This method accepts an array of image URLs and returns an array of saved image names. If Spatie Media Library is enabled and a model is provided, media will be attached to the model's collection.
-
-You can also extract image URLs directly from a SimplePie item using:
+### Full-Text Content Extraction
 
 ```php
-$images = $rss->extractImagesFromItem($item);
-$primaryImage = $images[0] ?? null;
+use Kalimeromk\Rssfeed\FullTextExtractor;
+
+$extractor = app(FullTextExtractor::class);
+
+// Extract from URL
+$result = $extractor->extract('https://example.com/article');
+
+if ($result['success']) {
+    echo $result['title'];
+    echo $result['content'];
+    echo $result['author'];
+    echo $result['language'];
+}
+
+// Extract from HTML string
+$result = $extractor->extractFromHtml($html, 'https://example.com/article');
 ```
 
-### **Using Default Laravel Storage**
-```php
-$images = [
-    'http://example.com/image1.jpg',
-    'http://example.com/image2.jpg',
-];
-$rss = app(\Kalimeromk\Rssfeed\RssFeed::class);
-$savedImageNames = $rss->saveImagesToStorage($images);
-```
-
-### **Using Spatie Media Library**
-
-If you have **Spatie Media Library** enabled and you want to save images to a media collection:
+### Process Feed with Full Content
 
 ```php
-use App\Models\Post;
+use RssFeed;
 
-$rss = app(\Kalimeromk\Rssfeed\RssFeed::class);
-$post = Post::find(1); // Model should support addMediaFromUrl (Spatie Media Library)
+$items = RssFeed::parseRssFeeds('https://example.com/feed.xml');
 
-$images = [
-    'http://example.com/image1.jpg',
-    'http://example.com/image2.jpg',
-];
-$savedImageNames = $rss->saveImagesToStorage($images, $post);
-```
-
-### **Ensure Your Model Implements Spatie Media Library**
-```php
-use Illuminate\Database\Eloquent\Model;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
-
-class Post extends Model implements HasMedia
-{
-    use InteractsWithMedia;
+foreach ($items as $item) {
+    echo $item['title'];
+    echo $item['content']; // Full article content
+    echo $item['author'];
+    echo $item['language'];
 }
 ```
 
-## Advanced Configuration
-
-### Custom Content Selectors per Domain
-
-If you need to extract content from specific websites with unique HTML structure:
+### Clean Text Extraction (No HTML)
 
 ```php
-// config/rssfeed.php
+$items = RssFeed::parseRssFeedsClean('https://example.com/feed.xml');
+
+foreach ($items as $item) {
+    echo $item['content']; // Plain text, no HTML
+}
+```
+
+### Generate Feed Output
+
+```php
+use Kalimeromk\Rssfeed\Services\FeedOutputService;
+
+$outputService = app(FeedOutputService::class);
+
+// RSS 2.0
+$rss = $outputService->toRss($feedData);
+
+// Atom
+$atom = $outputService->toAtom($feedData);
+
+// JSON Feed
+$json = $outputService->toJson($feedData);
+```
+
+### Image Handling
+
+```php
+// Extract images from feed item
+$images = RssFeed::extractImagesFromItem($item);
+
+// Save images to storage
+$savedImages = RssFeed::saveImagesToStorage($images, $model);
+```
+
+### HTML Sanitization
+
+```php
+use Kalimeromk\Rssfeed\Services\HtmlSanitizerService;
+
+$sanitizer = app(HtmlSanitizerService::class);
+
+// Basic sanitization
+$clean = $sanitizer->sanitize($html);
+
+// Remove inline styles
+$noStyles = $sanitizer->sanitizeWithoutStyles($html);
+
+// Strip all HTML
+$text = $sanitizer->stripAllTags($html);
+```
+
+## 🔧 Advanced Usage
+
+### Custom Site Configuration
+
+Create custom extraction rules in `site_config/custom/{hostname}.txt`:
+
+```
+# Example: example.com.txt
+body: //article[contains(@class, 'main-content')]
+title: //h1
+author: //span[@class='author-name']
+date: //time[@pubdate]
+
+# Remove unwanted elements
+strip_id_or_class: ads,comments,sidebar
+strip: //div[@class='donation-form']
+```
+
+### Domain-Specific Selectors
+
+Add to `config/rssfeed.php`:
+
+```php
 'content_selectors' => [
-    'example.com' => '//div[@class="article-body"]',
-    'news.site.com' => '//article[contains(@class, "main-content")]',
+    'example.com' => '//div[@class="article-content"]',
+    'news.example.com' => '//article[contains(@class, "story")]',
 ],
 ```
 
-### Custom Remove Selectors
-
-Add your own selectors for elements to remove:
+### Content Cleanup Rules
 
 ```php
-// config/rssfeed.php
 'remove_selectors' => [
-    // Default selectors...
-    
-    // Your custom selectors
-    '.custom-ad-banner',
-    '#newsletter-signup',
-    '.site-specific-donation',
+    '.donation-form',
+    '.share-buttons',
+    '.comments',
+    '.advertisement',
 ],
 ```
 
-## Jobs
+## 🧪 Testing
 
-This package does not ship with a built-in Job class. If you need queueing, create a Laravel Job and inject the `RssFeed` service inside it.
+```bash
+composer test
+```
 
-## Credits
+## 📂 Package Structure
 
-This package was created by KalimeroMK.
+```
+src/
+├── Extractors/
+│   ├── Readability/          # Arc90 Readability port
+│   │   ├── Readability.php
+│   │   └── JSLikeHTMLElement.php
+│   └── ContentExtractor/     # Site config extraction
+│       ├── ContentExtractor.php
+│       └── SiteConfig.php
+├── Handlers/
+│   ├── MultiPageHandler.php  # Multi-page article handling
+│   └── SinglePageHandler.php # Single-page view detection
+├── Services/
+│   ├── CacheService.php      # Laravel cache wrapper
+│   ├── FeedOutputService.php # RSS/Atom/JSON generation
+│   ├── HtmlSanitizerService.php
+│   ├── LanguageDetectionService.php
+│   └── SecurityValidator.php
+├── FullTextExtractor.php     # Main extraction class
+├── RssFeed.php              # Original RSS functionality
+└── RssfeedServiceProvider.php
 
-## License
+site_config/
+└── standard/                # 1679+ site configurations
+```
 
-The MIT License (MIT). Please see License File for more information.
+## 🔄 Migration from Original Full-Text RSS
+
+| Original Feature | Laravel Equivalent |
+|------------------|-------------------|
+| `Readability.php` | `FullTextExtractor::extract()` |
+| Site Config files | Same format, copied to `site_config/` |
+| `makefulltextfeed.php` | `FeedOutputService` |
+| `htmLawed` | `HtmlSanitizerService` (HTMLPurifier) |
+| `Zend_Cache` | `CacheService` (Laravel Cache) |
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Credits
+
+This package is based on the [Full-Text RSS](https://github.com/fivefilters/full-text-rss) project by FiveFilters.org, ported to Laravel with modern PHP practices.
+
+- Original Readability by Arc90 Labs
+- Ported to PHP by Keyvan Minoukadeh
+- Laravel adaptation by Zorab Shefot Bogoevski
