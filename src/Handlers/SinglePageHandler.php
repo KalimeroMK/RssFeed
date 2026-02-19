@@ -21,6 +21,10 @@ class SinglePageHandler
      */
     public function tryGetSinglePage(string $html, string $url, ContentExtractor $contentExtractor): ?array
     {
+        // Single page functionality disabled - method not implemented in ContentExtractor
+        return null;
+        
+        /* TODO: Implement findSinglePageUrl in ContentExtractor
         if (! config('rssfeed.singlepage_enabled', true)) {
             return null;
         }
@@ -53,5 +57,6 @@ class SinglePageHandler
             Log::error('Error fetching single page', ['url' => $singlePageUrl, 'error' => $e->getMessage()]);
             return null;
         }
+        */
     }
 }
