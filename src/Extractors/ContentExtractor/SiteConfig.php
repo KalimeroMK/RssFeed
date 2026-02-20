@@ -5,13 +5,8 @@ declare(strict_types=1);
 /**
  * Site Config
  *
- * Each instance of this class should hold extraction patterns and other directives
- * for a website. See ContentExtractor class to see how it's used.
- *
  * @version 1.1
- *
  * @date 2017-09-25
- *
  * @author Keyvan Minoukadeh
  * @copyright 2017 Keyvan Minoukadeh
  * @license http://www.gnu.org/licenses/agpl-3.0.html AGPL v3
@@ -23,110 +18,65 @@ class SiteConfig
 {
     public const HOSTNAME_REGEX = '/^(([a-zA-Z0-9-]*[a-zA-Z0-9])\.)*([A-Za-z0-9-]*[A-Za-z0-9])$/';
 
-    // Use first matching element as title (0 or more xpath expressions)
     public array $title = [];
 
-    // Use first matching element as body (0 or more xpath expressions)
     public array $body = [];
 
-    // Use first matching element as author (0 or more xpath expressions)
     public array $author = [];
 
-    // Use first matching element as date (0 or more xpath expressions)
     public array $date = [];
 
-    // Strip elements matching these xpath expressions (0 or more)
     public array $strip = [];
 
-    // Strip elements which contain these strings (0 or more) in the id or class attribute
     public array $strip_id_or_class = [];
 
-    // Strip images which contain these strings (0 or more) in the src attribute
     public array $strip_image_src = [];
 
-    // Mark article as a native ad if any of these expressions match (0 or more xpath expressions)
     public array $native_ad_clue = [];
 
-    // Additional HTTP headers to send (associative array)
     public array $http_header = [];
 
-    // Process HTML with tidy before creating DOM (bool or null if undeclared)
     public ?bool $tidy = null;
 
-    // Skip processing JSON-LD
     public ?bool $skip_json_ld = null;
 
-    // Autodetect title/body if xpath expressions fail to produce results.
-    // Note that this applies to title and body separately, ie.
-    //   * if we get a body match but no title match, this option will determine whether we autodetect title
-    //   * if neither match, this determines whether we autodetect title and body.
-    // Also note that this only applies when there is at least one xpath expression in title or body, ie.
-    //   * if title and body are both empty (no xpath expressions), this option has no effect (both title and body will be auto-detected)
-    //   * if there's an xpath expression for title and none for body, body will be auto-detected and this option will determine whether we auto-detect title if the xpath expression for it fails to produce results.
-    // Usage scenario: you want to extract something specific from a set of URLs, e.g. a table, and if the table is not found, you want to ignore the entry completely. Auto-detection is unlikely to succeed here, so you construct your patterns and set this option to false. Another scenario may be a site where auto-detection has proven to fail (or worse, picked up the wrong content).
-    // bool or null if undeclared
     public ?bool $autodetect_on_failure = null;
 
-    // Clean up content block - attempt to remove elements that appear to be superfluous
-    // bool or null if undeclared
     public ?bool $prune = null;
 
-    // Test URL - if present, can be used to test the config above
     public array $test_url = [];
 
-    // Test URL contains - one or more snippets of text from the article body.
-    // Used to determine if the extraction rules for the site are still valid (ie. still extracting relevant content)
-    // Keys should be one or more of the test URLs supplied, and value an array of strings to look for.
     public array $test_contains = [];
 
-    // If page contains - XPath expression. Used to determine if the preceding rule gets evaluated or not.
-    // Currently only works with single_page_link.
     public array $if_page_contains = [];
 
-    // Single-page link - should identify a link element or URL pointing to the page holding the entire article
-    // This is useful for sites which split their articles across multiple pages. Links to such pages tend to
-    // display the first page with links to the other pages at the bottom. Often there is also a link to a page
-    // which displays the entire article on one page (e.g. 'print view').
-    // This should be an XPath expression identifying the link to that page. If present and we find a match,
-    // we will retrieve that page and the rest of the options in this config will be applied to the new page.
     public array $single_page_link = [];
 
     public array $next_page_link = [];
 
-    // Single-page link in feed? - same as above, but patterns applied to item description HTML taken from feed
     public array $single_page_link_in_feed = [];
 
-    // Which parser to use for turning raw HTML into a DOMDocument (either 'libxml' or 'html5php')
-    // string or null if undeclared
     public ?string $parser = null;
 
-    // Insert detected image (currently only og:image) into beginning of extracted article
-    // Only does this if extracted article contains no images
-    // bool or null if undeclared
     public ?bool $insert_detected_image = null;
 
-    // Strings to search for in HTML before processing begins (used with $replace_string)
     public array $find_string = [];
 
-    // Strings to replace those found in $find_string before HTML processing begins
     public array $replace_string = [];
 
-    // the options below cannot be set in the config files which this class represents
-
-    // public $cache_in_apc = false; // used to decide if we should cache in apc or not
     public static bool $debug = false;
 
-    protected bool $default_tidy = true; // used if undeclared
+    protected bool $default_tidy = true;
 
-    protected bool $default_skip_json_ld = false; // used if undeclared
+    protected bool $default_skip_json_ld = false;
 
-    protected bool $default_autodetect_on_failure = true; // used if undeclared
+    protected bool $default_autodetect_on_failure = true;
 
-    protected bool $default_prune = true; // used if undeclared
+    protected bool $default_prune = true;
 
-    protected string $default_parser = 'html5php'; // used if undeclared
+    protected string $default_parser = 'html5php';
 
-    protected bool $default_insert_detected_image = true; // used if undeclared
+    protected bool $default_insert_detected_image = true;
 
     protected static bool $apc = false;
 
@@ -137,13 +87,6 @@ class SiteConfig
     /** @var array<string, SiteConfig> */
     protected static array $config_cache = [];
 
-    // enable APC caching of certain site config files?
-    // If enabled the following site config files will be
-    // cached in APC cache (when requested for first time):
-    // * anything in site_config/custom/ and its corresponding file in site_config/standard/
-    // * the site config files associated with HTML fingerprints
-    // * the global site config file
-    // returns true if enabled, false otherwise
     public static function use_apc(bool $apc = true): bool
     {
         if (! function_exists('apc_add')) {
@@ -184,7 +127,6 @@ class SiteConfig
         if (mb_substr($key, 0, 4) === 'www.') {
             $key = mb_substr($key, 4);
         }
-        // var_dump('in cache?', $key, self::$config_cache);
         if (array_key_exists($key, self::$config_cache)) {
             self::debug("... site config for $key already loaded in this request");
 
@@ -215,9 +157,6 @@ class SiteConfig
         return false;
     }
 
-    // returns SiteConfig instance if an appropriate one is found, false otherwise
-    // if $exact_host_match is true, we will not look for wildcard config matches
-    // by default if host is 'test.example.org' we will look for and load '.example.org.txt' if it exists
     public static function build(string $host, bool $exact_host_match = false): self|false
     {
         $host = mb_strtolower($host);
@@ -227,15 +166,11 @@ class SiteConfig
         if (! $host || (mb_strlen($host) > 200) || ! preg_match(self::HOSTNAME_REGEX, mb_ltrim($host, '.'))) {
             return false;
         }
-        // got a merged one?
         $config = self::load_cached_merged($host, $exact_host_match);
         if ($config) {
-            // self::debug('. returned merged config from a previous request');
             return $config;
         }
-        // check for site configuration
         $try = [$host];
-        // should we look for wildcard matches
         if (! $exact_host_match) {
             $split = explode('.', $host);
             if (count($split) > 1) {
@@ -244,15 +179,11 @@ class SiteConfig
             }
         }
 
-        // look for site config file in custom folder
         self::debug(". looking for site config for $host in custom folder");
-        // var_dump($try);
         $config = null;
         $config_std = null;
         foreach ($try as $h) {
-            // $h_key = $h.'.'.$key_suffix;
             $h_key = $h.'.custom';
-            // var_dump($h_key, $h);
             if ($config = self::load_cached($h_key)) {
                 break;
             }
@@ -260,14 +191,10 @@ class SiteConfig
                 self::debug("... found site config ($h.txt)");
                 $file_custom = self::$config_path_custom."/".$h.".txt";
                 $config = self::build_from_file($file_custom);
-                // $matched_name = $h;
                 break;
             }
         }
 
-        // if we found site config, process it
-        // if autodetec on failure is off (on by default) we do not need to look
-        // in secondary folder
         if ($config && ! $config->autodetect_on_failure()) {
             self::debug('... autodetect on failure is disabled (no other site config files will be loaded)');
             self::add_to_cache_merged($host, $exact_host_match, $config);
@@ -275,7 +202,6 @@ class SiteConfig
             return $config;
         }
 
-        // look for site config file in secondary folder
         if (isset(self::$config_path_fallback)) {
             self::debug(". looking for site config for $host in standard folder");
             foreach ($try as $h) {
@@ -291,7 +217,6 @@ class SiteConfig
             }
         }
 
-        // return false if no config file found
         if (! $config && ! $config_std) {
             self::debug("... no site config match for $host");
             self::add_to_cache_merged($host, $exact_host_match);
@@ -299,20 +224,14 @@ class SiteConfig
             return false;
         }
 
-        // final config handling
         $config_final = null;
         if (! $config_std && $config) {
             $config_final = $config;
-            // merge with primary
         } elseif ($config_std && $config) {
             self::debug('. merging config files');
             $config->append($config_std);
             $config_final = $config;
         } else {
-            // return just secondary
-            // $config = self::build_from_array($config_lines);
-            // if APC caching is available and enabled, mark this for cache
-            // $config->cache_in_apc = true;
             $config_final = $config_std;
         }
         self::add_to_cache_merged($host, $exact_host_match, $config_final);
@@ -351,36 +270,24 @@ class SiteConfig
         foreach ($lines as $line) {
             $line = mb_trim($line);
 
-            // skip comments, empty lines
             if ($line === '' || $line[0] === '#') {
                 continue;
             }
 
-            // get command
             $command = explode(':', $line, 2);
-            // if there's no colon ':', skip this line
             if (count($command) !== 2) {
                 continue;
             }
             $val = mb_trim($command[1]);
             $command = mb_trim($command[0]);
-            // if ($command == '' || $val == '') continue;
-            // $val can be empty, e.g. replace_string:
             if ($command === '') {
                 continue;
             }
 
-            // strip_attr is now an alias for strip.
-            // In FTR 3.8 we can strip attributes from elements, not only the elements themselves
-            // e.g. strip: //img/@srcset (removes srcset attribute from all img elements)
-            // but for backward compatibility (to avoid errors with new config files + old version of FTR)
-            // we've introduced strip_attr and we'll recommend using that in our public site config rep.
-            // strip_attr: //img/@srcset
             if ($command === 'strip_attr') {
                 $command = 'strip';
             }
 
-            // check for commands where we accept multiple statements
             if (in_array($command, [
                 'title',
                 'body',
@@ -399,20 +306,15 @@ class SiteConfig
                 'replace_string',
             ])) {
                 $config->$command[] = $val;
-                // check for single statement commands that evaluate to true or false
             } elseif (in_array($command,
                 ['tidy', 'prune', 'autodetect_on_failure', 'insert_detected_image', 'skip_json_ld'])) {
                 $config->$command = ($val === 'yes');
-                // check for single statement commands stored as strings
             } elseif (in_array($command, ['parser'])) {
                 $config->$command = $val;
-                // special treatment for test_contains
             } elseif (in_array($command, ['test_contains'])) {
                 $config->add_test_contains($val);
-                // special treatment for if_page_contains
             } elseif (in_array($command, ['if_page_contains'])) {
                 $config->add_if_page_contains_condition($val);
-                // check for replace_string(find): replace
             } elseif ((mb_substr($command, -1) === ')') && preg_match('!^([a-z0-9_]+)\((.*?)\)$!i', $command, $match)) {
                 if (in_array($match[1], ['replace_string'])) {
                     $config->find_string[] = $match[2];
@@ -427,7 +329,6 @@ class SiteConfig
         return $config;
     }
 
-    // return bool or null
     public function insert_detected_image(bool $use_default = true): ?bool
     {
         if ($use_default) {
@@ -437,7 +338,6 @@ class SiteConfig
         return $this->insert_detected_image;
     }
 
-    // return bool or null
     public function tidy(bool $use_default = true): ?bool
     {
         if ($use_default) {
@@ -447,7 +347,6 @@ class SiteConfig
         return $this->tidy;
     }
 
-    // return bool or null
     public function skip_json_ld(bool $use_default = true): ?bool
     {
         if ($use_default) {
@@ -457,7 +356,6 @@ class SiteConfig
         return $this->skip_json_ld;
     }
 
-    // return bool or null
     public function prune(bool $use_default = true): ?bool
     {
         if ($use_default) {
@@ -467,7 +365,6 @@ class SiteConfig
         return $this->prune;
     }
 
-    // return string or null
     public function parser(bool $use_default = true): ?string
     {
         if ($use_default) {
@@ -477,7 +374,6 @@ class SiteConfig
         return $this->parser;
     }
 
-    // return bool or null
     public function autodetect_on_failure(bool $use_default = true): ?bool
     {
         if ($use_default) {
@@ -489,7 +385,6 @@ class SiteConfig
 
     public function append(self $newconfig): void
     {
-        // check for commands where we accept multiple statements (no test_url)
         foreach (
             [
                 'title',
@@ -505,15 +400,11 @@ class SiteConfig
                 'native_ad_clue',
             ] as $var
         ) {
-            // append array elements for this config variable from $newconfig to this config
-            // $this->$var = $this->$var + $newconfig->$var;
             $this->$var = array_unique(array_merge($this->$var, $newconfig->$var));
         }
-        // special handling of commands where key is important and config values being appended should not overwrite existing ones
         foreach (['http_header'] as $var) {
             $this->$var = array_merge($newconfig->$var, $this->$var);
         }
-        // special handling of if_page_contains directive
         foreach (['single_page_link'] as $var) {
             if (isset($this->if_page_contains[$var]) && isset($newconfig->if_page_contains[$var])) {
                 $this->if_page_contains[$var] = array_merge($newconfig->if_page_contains[$var],
@@ -522,8 +413,6 @@ class SiteConfig
                 $this->if_page_contains[$var] = $newconfig->if_page_contains[$var];
             }
         }
-        // check for single statement commands
-        // we do not overwrite existing non null values
         foreach (
             [
                 'tidy',
@@ -538,15 +427,11 @@ class SiteConfig
                 $this->$var = $newconfig->$var;
             }
         }
-        // treat find_string and replace_string separately (don't apply array_unique) (thanks fabrizio!)
         foreach (['find_string', 'replace_string'] as $var) {
-            // append array elements for this config variable from $newconfig to this config
-            // $this->$var = $this->$var + $newconfig->$var;
             $this->$var = array_merge($this->$var, $newconfig->$var);
         }
     }
 
-    // Add test_contains to last test_url
     public function add_test_contains(string $test_contains): void
     {
         if (! empty($this->test_url)) {
@@ -560,8 +445,6 @@ class SiteConfig
         }
     }
 
-    // Add if_page_page_contains
-    // TODO: Expand so it can be used with other rules too
     public function add_if_page_contains_condition(string $if_page_contains): void
     {
         if (! empty($this->single_page_link)) {
@@ -585,10 +468,7 @@ class SiteConfig
     protected static function debug(string $msg): void
     {
         if (self::$debug) {
-            // $mem = round(memory_get_usage()/1024, 2);
-            // $memPeak = round(memory_get_peak_usage()/1024, 2);
             echo '* ', $msg;
-            // echo ' - mem used: ',$mem," (peak: $memPeak)\n";
             echo "\n";
             ob_flush();
             flush();

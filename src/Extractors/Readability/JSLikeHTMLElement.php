@@ -24,12 +24,10 @@ class JSLikeHTMLElement extends DOMElement
     public function __set(string $name, mixed $value): void
     {
         if ($name === 'innerHTML') {
-            // First, empty the element
             for ($x = $this->childNodes->length - 1; $x >= 0; $x--) {
                 $this->removeChild($this->childNodes->item($x));
             }
 
-            // $value holds our new inner HTML
             if ($value !== '' && $value !== null) {
                 $f = $this->ownerDocument->createDocumentFragment();
                 // appendXML() expects well-formed markup (XHTML)

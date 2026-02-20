@@ -1,0 +1,109 @@
+# Site config for pravoslavie.bg
+# Bulgarian Orthodox Portal - WordPress site using Hueman theme
+
+# Main content is in .entry-inner inside .entry.themeform
+body: //div[@class="entry-inner"]
+
+# Alternative selectors (fallback)
+body: //div[contains(@class, "entry-content")]
+body: //article//div[contains(@class, "entry")]
+
+# Title extraction
+title: //meta[@property="og:title"]/@content
+title: //h1[@class="post-title entry-title"]
+
+# Author extraction
+author: //meta[@name="author"]/@content
+author: //span[@class="authorname"]//a
+
+# Date extraction
+date: //meta[@property="article:published_time"]/@content
+date: //span[@class="published"]
+
+# === STRIP UNWANTED ELEMENTS ===
+
+# Social sharing buttons (Heateor plugin)
+strip: //div[contains(@class, "heateor_sss_sharing_container")]
+strip: //div[contains(@class, "heateorSssClear")]
+strip_id_or_class: heateor_sss_sharing_container
+strip_id_or_class: heateorSssClear
+
+# Donation forms (GiveWP plugin)
+strip: //div[contains(@class, "give-form-wrap")]
+strip: //form[contains(@class, "give-form")]
+strip: //div[contains(@class, "give-form-type-multi")]
+strip_id_or_class: give-form-wrap
+strip_id_or_class: give-form
+strip_id_or_class: give-total-wrap
+strip_id_or_class: give-donation-amount
+strip_id_or_class: give-donation-levels-wrap
+
+# Widget areas with donation forms
+strip: //div[contains(@class, "awac-wrapper")]
+strip: //div[contains(@class, "widget") and contains(@class, "give_forms_widget")]
+
+# Related posts section
+strip: //ul[contains(@class, "related-posts")]
+strip: //div[contains(@class, "related-posts")]
+strip_id_or_class: related-posts
+
+# Post navigation (next/prev)
+strip: //nav[contains(@class, "post-nav")]
+strip_id_or_class: post-nav
+strip_id_or_class: navi
+
+# Post footer/meta
+strip: //div[contains(@class, "post-meta")]
+strip: //p[contains(@class, "post-byline")]
+
+# Comments section
+strip: //div[@id="comments"]
+strip: //div[@id="respond"]
+strip: //div[contains(@class, "comment-respond")]
+
+# Sidebar widgets (if any slip through)
+strip: //aside
+strip: //div[@id="sidebar"]
+
+# Advertisements
+strip: //div[contains(@class, "adsbygoogle")]
+strip: //ins[contains(@class, "adsbygoogle")]
+strip: //div[contains(@class, "ad") and contains(@class, "widget")]
+strip: //div[contains(@class, "awac")]
+
+# OneSignal push notifications
+strip: //div[contains(@class, "onesignal")]
+
+# Footer elements
+strip: //footer
+strip_id_or_class: footer
+
+# Image containers (keep images but strip captions if needed)
+# strip: //figcaption
+
+# === CLEAN UP ===
+
+# Remove empty divs and paragraphs
+strip: //div[not(node())]
+strip: //p[not(node())]
+
+# Remove Patreon images and links
+strip: //img[contains(@src, "patreon")]
+
+# === SETTINGS ===
+
+# Disable auto-detection since we have specific selectors
+autodetect_on_failure: yes
+
+# Keep pruning enabled to clean up remaining elements
+prune: yes
+
+# Use libxml parser (html5php requires masterminds/html5 package)
+parser: libxml
+
+# Test URLs for validation
+test_url: https://www.pravoslavie.bg/?p=1634192
+test_contains: Настъпва последният ден от подготовката за поста
+
+test_url: https://www.pravoslavie.bg/?p=1634183
+test_contains: Аз съм Синът Божи
