@@ -16,7 +16,7 @@ class ContentFetcherServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->fetcher = new ContentFetcherService();
+        $this->fetcher = new ContentFetcherService;
     }
 
     protected function getPackageProviders($app): array
@@ -159,9 +159,9 @@ class ContentFetcherServiceTest extends TestCase
     public function it_handles_different_encodings(): void
     {
         $postUrl = 'http://example.com/post';
-        $html = "<html><head><meta charset=\"ISO-8859-1\"></head><body>"
+        $html = '<html><head><meta charset="ISO-8859-1"></head><body>'
             ."<div class=\"content\"><p>Special chars: \xe9 \xfc</p></div>"
-            ."</body></html>";
+            .'</body></html>';
 
         Http::fake([
             $postUrl => Http::response($html, 200),

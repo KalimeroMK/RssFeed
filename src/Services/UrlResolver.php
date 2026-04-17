@@ -22,6 +22,7 @@ class UrlResolver
 
         if ($this->startsWith($url, '//')) {
             $scheme = parse_url((string) $baseUrl, PHP_URL_SCHEME) ?: 'https';
+
             return $scheme.':'.$url;
         }
 
@@ -45,6 +46,7 @@ class UrlResolver
 
         if ($this->startsWith($url, '//')) {
             $scheme = parse_url($base, PHP_URL_SCHEME) ?: 'https';
+
             return $scheme.':'.$url;
         }
 

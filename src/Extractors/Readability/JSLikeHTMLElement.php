@@ -14,6 +14,7 @@ use DOMElement;
  * HTML elements in the same way it's done in JavaScript.
  *
  * @author Keyvan Minoukadeh - http://www.keyvan.net
+ *
  * @see http://fivefilters.org
  */
 class JSLikeHTMLElement extends DOMElement
@@ -36,7 +37,7 @@ class JSLikeHTMLElement extends DOMElement
                     $this->appendChild($f);
                 } else {
                     // $value is probably ill-formed
-                    $f = new \DOMDocument();
+                    $f = new \DOMDocument;
                     $result = @$f->loadHTML('<?xml encoding="UTF-8"?><htmlfragment>'.(string) $value.'</htmlfragment>');
                     if ($result) {
                         $import = $f->getElementsByTagName('htmlfragment')->item(0);

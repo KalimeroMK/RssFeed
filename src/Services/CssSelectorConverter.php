@@ -34,17 +34,17 @@ class CssSelectorConverter
 
         // Handle attribute contains selector [class*="value"]
         if (preg_match('/^\[([a-zA-Z0-9_-]+)\*="([^"]*)"\]$/', $selector, $matches)) {
-            return "//*[contains(@".$this->escapeName($matches[1]).", '".$this->escapeValue($matches[2])."')]";
+            return '//*[contains(@'.$this->escapeName($matches[1]).", '".$this->escapeValue($matches[2])."')]";
         }
 
         // Handle attribute selector [attr=value]
         if (preg_match('/^\[([a-zA-Z0-9_-]+)="([^"]*)"\]$/', $selector, $matches)) {
-            return "//*[@".$this->escapeName($matches[1])."='".$this->escapeValue($matches[2])."']";
+            return '//*[@'.$this->escapeName($matches[1])."='".$this->escapeValue($matches[2])."']";
         }
 
         // Handle attribute selector [attr] (no value)
         if (preg_match('/^\[([a-zA-Z0-9_-]+)\]$/', $selector, $matches)) {
-            return "//*[@".$this->escapeName($matches[1])."]";
+            return '//*[@'.$this->escapeName($matches[1]).']';
         }
 
         // Handle ID selector #id
@@ -74,7 +74,7 @@ class CssSelectorConverter
                 throw new \InvalidArgumentException('Invalid tag.class selector');
             }
 
-            return "//".$this->escapeName($tag)."[contains(@class, '".$this->escapeValue($class)."')]";
+            return '//'.$this->escapeName($tag)."[contains(@class, '".$this->escapeValue($class)."')]";
         }
 
         // Handle tag#id
@@ -84,11 +84,11 @@ class CssSelectorConverter
                 throw new \InvalidArgumentException('Invalid tag#id selector');
             }
 
-            return "//".$this->escapeName($tag)."[@id='".$this->escapeValue($id)."']";
+            return '//'.$this->escapeName($tag)."[@id='".$this->escapeValue($id)."']";
         }
 
         // Default: tag name
-        return "//".$this->escapeName($selector);
+        return '//'.$this->escapeName($selector);
     }
 
     /**
@@ -113,7 +113,7 @@ class CssSelectorConverter
         if (str_contains($value, "'")) {
             $parts = explode("'", $value);
 
-            return "concat('" . implode("', \"'\", '", $parts) . "')";
+            return "concat('".implode("', \"'\", '", $parts)."')";
         }
 
         return $value;

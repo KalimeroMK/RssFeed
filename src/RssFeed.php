@@ -95,7 +95,7 @@ class RssFeed
                     $file->storeAs($imageStoragePath, $imageName, $spatieDisk);
                 }
                 $savedImageNames[] = $imageName;
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 Log::error('Error processing image URL: '.$image, ['exception' => $e]);
 
                 continue;
@@ -260,9 +260,6 @@ class RssFeed
         $resolver = $this->app->make(UrlResolver::class);
         $tags = $dom->getElementsByTagName('img');
         foreach ($tags as $tag) {
-            if (! $tag instanceof \DOMElement) {
-                continue;
-            }
             $src = $tag->getAttribute('src');
             $dataSrc = $tag->getAttribute('data-src');
             $dataOriginal = $tag->getAttribute('data-original');
@@ -377,7 +374,7 @@ class RssFeed
 
         $parsedItems = [];
 
-        $items = $feed->get_items() ?? [];
+        $items = $feed->get_items();
         foreach ($items as $item) {
             $title = (string) $item->get_title();
             $description = (string) $item->get_description();

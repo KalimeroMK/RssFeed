@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Kalimeromk\Rssfeed\Services;
 
+use LanguageDetection\Language;
+
 /**
  * Language Detection Service
  * Detects the language of article content
- * 
+ *
  * Note: For full functionality, install patrickschur/language-detection package
  * composer require patrickschur/language-detection
  */
@@ -25,11 +27,11 @@ class LanguageDetectionService
         }
 
         // Try to use external library if available
-        if (class_exists(\LanguageDetection\Language::class)) {
-            $detector = new \LanguageDetection\Language();
+        if (class_exists(Language::class)) {
+            $detector = new Language;
             $result = $detector->detect($text);
             $languages = $result->close();
-            
+
             return $languages[0] ?? null;
         }
 
@@ -53,6 +55,7 @@ class LanguageDetectionService
 
         // Extract text from HTML and detect
         $text = strip_tags($html);
+
         return $this->detect($text);
     }
 
@@ -63,7 +66,7 @@ class LanguageDetectionService
     private function detectFromCommonWords(string $text): ?string
     {
         $text = strtolower($text);
-        
+
         // Define common words for different languages
         $patterns = [
             'mk' => '/\b(и|на|во|се|од|да|е|што|со|за|ги|го|не|ја|та|те|ите|сите|македонски)\b/u',
@@ -92,6 +95,7 @@ class LanguageDetectionService
         }
 
         arsort($scores);
+
         return array_key_first($scores);
     }
 

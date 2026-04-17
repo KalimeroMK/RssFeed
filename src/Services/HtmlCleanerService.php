@@ -26,14 +26,16 @@ class HtmlCleanerService
 
         $xpath = new DOMXPath($dom);
         $scripts = $xpath->query('//script|//style|//noscript|//iframe|//embed|//object');
-        foreach ($scripts as $script) {
-            if ($script->parentNode) {
-                $script->parentNode->removeChild($script);
+        if ($scripts) {
+            foreach ($scripts as $script) {
+                if ($script instanceof \DOMNode && $script->parentNode) {
+                    $script->parentNode->removeChild($script);
+                }
             }
         }
 
         $text = $dom->textContent;
-        $text = preg_replace('/\s+/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text) ?? '';
         $text = trim($text);
         $text = $this->removeDonationTextPatterns($text);
 
@@ -78,10 +80,10 @@ class HtmlCleanerService
         ];
 
         foreach ($patterns as $pattern) {
-            $text = preg_replace($pattern, '', $text);
+            $text = preg_replace($pattern, '', $text) ?? '';
         }
 
-        $text = preg_replace('/\s+/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text) ?? '';
 
         return trim($text);
     }

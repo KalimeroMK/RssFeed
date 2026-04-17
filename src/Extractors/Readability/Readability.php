@@ -3,31 +3,32 @@
 declare(strict_types=1);
 
 /**
-* Arc90's Readability ported to PHP for FiveFilters.org
-* Based on readability.js version 1.7.1 (without multi-page support)
-* Updated to allow HTML5 parsing with html5lib
-* Updated with lightClean mode to preserve more images and youtube/vimeo/viddler embeds
-* Updated to allow HTML5 parsing with Gumbo PHP
-* ------------------------------------------------------
-* Original URL: http://lab.arc90.com/experiments/readability/js/readability.js
-* Arc90's project URL: http://lab.arc90.com/experiments/readability/
-* JS Source: http://code.google.com/p/arc90labs-readability
-* Ported by: Keyvan Minoukadeh, http://www.keyvan.net
-* More information: http://fivefilters.org/content-only/
-* License: Apache License, Version 2.0
-* Requires: PHP5
-* Date: 2017-02-05
-*/
+ * Arc90's Readability ported to PHP for FiveFilters.org
+ * Based on readability.js version 1.7.1 (without multi-page support)
+ * Updated to allow HTML5 parsing with html5lib
+ * Updated with lightClean mode to preserve more images and youtube/vimeo/viddler embeds
+ * Updated to allow HTML5 parsing with Gumbo PHP
+ * ------------------------------------------------------
+ * Original URL: http://lab.arc90.com/experiments/readability/js/readability.js
+ * Arc90's project URL: http://lab.arc90.com/experiments/readability/
+ * JS Source: http://code.google.com/p/arc90labs-readability
+ * Ported by: Keyvan Minoukadeh, http://www.keyvan.net
+ * More information: http://fivefilters.org/content-only/
+ * License: Apache License, Version 2.0
+ * Requires: PHP5
+ * Date: 2017-02-05
+ */
 
 namespace Kalimeromk\Rssfeed\Extractors\Readability;
 
+use DOMAttr;
 use DOMDocument;
 use DOMElement;
-use DOMAttr;
 use DOMXPath;
 use Exception;
-use stdClass;
+use Layershifter\Gumbo\Parser;
 use Masterminds\HTML5;
+use stdClass;
 
 class Readability
 {
@@ -95,14 +96,14 @@ class Readability
 
         if ($parser === 'gumbo') {
             $html = str_replace('&apos;', "'", $html);
-            $this->dom = @\Layershifter\Gumbo\Parser::load($html);
+            $this->dom = @Parser::load($html);
         } elseif ($parser === 'html5lib' || $parser === 'html5php') {
             $html5 = new HTML5(['disable_html_ns' => true]);
             $this->dom = $html5->loadHTML($html);
         }
 
         if ($this->dom === null) {
-            $this->dom = new DOMDocument();
+            $this->dom = new DOMDocument;
             $this->dom->preserveWhiteSpace = false;
             @$this->dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         }
@@ -112,8 +113,6 @@ class Readability
 
     /**
      * Get article title element
-     *
-     * @return DOMElement|null
      */
     public function getTitle(): ?DOMElement
     {
@@ -122,8 +121,6 @@ class Readability
 
     /**
      * Get article content element
-     *
-     * @return DOMElement|null
      */
     public function getContent(): ?DOMElement
     {
@@ -200,9 +197,6 @@ class Readability
 
     /**
      * Run any post-process modifications to article content as necessary.
-     *
-     * @param  DOMElement $articleContent
-     * @return void
      */
     public function postProcessContent(DOMElement $articleContent): void
     {
@@ -215,9 +209,6 @@ class Readability
      * For easier reading, convert this document to have footnotes at the bottom rather than inline links.
      *
      * @see http://www.roughtype.com/archives/2010/05/experiments_in.php
-     *
-     * @param  DOMElement $articleContent
-     * @return void
      */
     public function addFootnotes(DOMElement $articleContent): void
     {
@@ -286,9 +277,6 @@ class Readability
     /**
      * Reverts P elements with class 'readability-styled'
      * to text nodes - which is what they were before.
-     *
-     * @param  DOMElement $articleContent
-     * @return void
      */
     public function revertReadabilityStyledElements(DOMElement $articleContent): void
     {
@@ -303,9 +291,6 @@ class Readability
     /**
      * Prepare the article node for display. Clean out any inline styles,
      * iframes, forms, strip extraneous <p> tags, etc.
-     *
-     * @param  DOMElement $articleContent
-     * @return void
      */
     public function prepArticle(DOMElement $articleContent): void
     {
@@ -352,9 +337,6 @@ class Readability
 
     /**
      * Remove script tags from document
-     *
-     * @param  DOMDocument|DOMElement $doc
-     * @return void
      */
     public function removeScripts(DOMDocument|DOMElement $doc): void
     {
@@ -371,9 +353,7 @@ class Readability
      * Get the inner text of a node.
      * This also strips out any excess whitespace to be found.
      *
-     * @param  DOMElement|null $e
      * @param  bool  $normalizeSpaces  (default: true)
-     * @return string
      */
     public function getInnerText(?DOMElement $e, bool $normalizeSpaces = true): string
     {
@@ -395,9 +375,7 @@ class Readability
     /**
      * Get the number of times a string $s appears in the node $e.
      *
-     * @param  DOMElement  $e
-     * @param  string $s - what to count. Default is ","
-     * @return int
+     * @param  string  $s  - what to count. Default is ","
      */
     public function getCharCount(DOMElement $e, string $s = ','): int
     {
@@ -406,9 +384,6 @@ class Readability
 
     /**
      * Remove the style attribute on every $e and under.
-     *
-     * @param  DOMElement|null  $e
-     * @return void
      */
     public function cleanStyles(?DOMElement $e): void
     {
@@ -424,9 +399,6 @@ class Readability
     /**
      * Get the density of links as a percentage of the content
      * This is the amount of text that is inside a link divided by the total text in the node.
-     *
-     * @param  DOMElement  $e
-     * @return float
      */
     public function getLinkDensity(DOMElement $e): float
     {
@@ -446,9 +418,6 @@ class Readability
     /**
      * Get an elements class/id weight. Uses regular expressions to tell if this
      * element looks good or bad.
-     *
-     * @param  DOMElement  $e
-     * @return int
      */
     public function getClassWeight(DOMElement $e): int
     {
@@ -481,9 +450,6 @@ class Readability
 
     /**
      * Remove extraneous break tags from a node.
-     *
-     * @param  DOMElement  $node
-     * @return void
      */
     public function killBreaks(DOMElement $node): void
     {
@@ -495,10 +461,6 @@ class Readability
     /**
      * Clean a node of all elements of type "tag".
      * (Unless it's a youtube/vimeo video. People love movies.)
-     *
-     * @param  DOMElement  $e
-     * @param  string  $tag
-     * @return void
      */
     public function clean(DOMElement $e, string $tag): void
     {
@@ -528,10 +490,6 @@ class Readability
      * Clean an element of all tags of type "tag" if they look fishy.
      * "Fishy" is an algorithm based on content length, classnames,
      * link density, number of images & embeds, etc.
-     *
-     * @param  DOMElement  $e
-     * @param  string  $tag
-     * @return void
      */
     public function cleanConditionally(DOMElement $e, string $tag): void
     {
@@ -646,9 +604,6 @@ class Readability
 
     /**
      * Clean out spurious headers from an Element. Checks things like classnames and link density.
-     *
-     * @param  DOMElement  $e
-     * @return void
      */
     public function cleanHeaders(DOMElement $e): void
     {
@@ -689,8 +644,6 @@ class Readability
 
     /**
      * Get the article title as an H1.
-     *
-     * @return DOMElement
      */
     protected function getArticleTitle(): DOMElement
     {
@@ -736,8 +689,6 @@ class Readability
     /**
      * Prepare the HTML document for readability to scrape it.
      * This includes things like stripping javascript, CSS, and handling terrible markup.
-     *
-     * @return void
      */
     protected function prepDocument(): void
     {
@@ -759,9 +710,6 @@ class Readability
     /**
      * Initialize a node with the readability object. Also checks the
      * className/id for special names to add to its score.
-     *
-     * @param  DOMElement $node
-     * @return void
      */
     protected function initializeNode(DOMElement $node): void
     {
@@ -823,9 +771,6 @@ class Readability
     /**
      * grabArticle - Using a variety of metrics (content score, classname, element types), find the content that is
      *               most likely to be the stuff a user wants to read. Then return it wrapped up in a div.
-     *
-     * @param  DOMDocument|DOMElement|null $page
-     * @return DOMElement|false
      */
     protected function grabArticle(DOMDocument|DOMElement|null $page = null): DOMElement|false
     {
@@ -959,7 +904,7 @@ class Readability
             $siblingNodes = $topCandidate->parentNode->childNodes;
         }
         if (! isset($siblingNodes)) {
-            $siblingNodes = new stdClass();
+            $siblingNodes = new stdClass;
             $siblingNodes->length = 0;
         }
 

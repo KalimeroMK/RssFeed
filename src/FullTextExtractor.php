@@ -14,7 +14,7 @@ use Kalimeromk\Rssfeed\Services\UrlResolver;
 
 /**
  * Full-Text Content Extractor
- * 
+ *
  * This class provides advanced content extraction capabilities using:
  * - Site-specific configuration files
  * - Readability algorithm for automatic content detection
@@ -33,7 +33,7 @@ class FullTextExtractor
 
     /**
      * Extract full text content from a URL
-     * 
+     *
      * @return array<string, mixed>
      */
     public function extract(string $url): array
@@ -54,15 +54,17 @@ class FullTextExtractor
                     'success' => false,
                     'content' => null,
                     'title' => null,
-                    'error' => 'HTTP request failed: ' . $response->status(),
+                    'error' => 'HTTP request failed: '.$response->status(),
                 ];
             }
 
             $html = $response->body();
+
             return $this->extractFromHtml($html, $url);
 
         } catch (\Exception $e) {
             Log::error('Full-text extraction failed', ['url' => $url, 'error' => $e->getMessage()]);
+
             return [
                 'success' => false,
                 'content' => null,
@@ -74,7 +76,7 @@ class FullTextExtractor
 
     /**
      * Extract content from HTML string
-     * 
+     *
      * @return array<string, mixed>
      */
     public function extractFromHtml(string $html, string $url): array
@@ -95,7 +97,7 @@ class FullTextExtractor
             if (config('rssfeed.singlepage_enabled', true)) {
                 $singlePageHandler = $this->app->make(SinglePageHandler::class);
                 $singlePageResult = $singlePageHandler->tryGetSinglePage($html, $url, $contentExtractor);
-                
+
                 if ($singlePageResult !== null) {
                     $html = $this->cleanHtml($singlePageResult['body']);
                     $html = $this->convertToUtf8($html);
@@ -143,7 +145,7 @@ class FullTextExtractor
             $isNativeAd = $contentExtractor->isNativeAd();
 
             // Convert DOMElement to HTML string early
-            if ($content instanceof \DOMElement) {
+            if ($content instanceof \DOMElement && $content->ownerDocument !== null) {
                 $content = (string) $content->ownerDocument->saveHTML($content);
             }
 
@@ -172,7 +174,7 @@ class FullTextExtractor
                 'success' => true,
                 'content' => $content,
                 'title' => $title,
-                'author' => is_array($authors) && ! empty($authors) ? implode(', ', $authors) : null,
+                'author' => ! empty($authors) ? implode(', ', $authors) : null,
                 'date' => $date,
                 'language' => $language,
                 'is_native_ad' => $isNativeAd,
@@ -181,6 +183,7 @@ class FullTextExtractor
 
         } catch (\Exception $e) {
             Log::error('Content extraction failed', ['url' => $url, 'error' => $e->getMessage()]);
+
             return [
                 'success' => false,
                 'content' => null,
@@ -197,7 +200,7 @@ class FullTextExtractor
     {
         // Remove strange things
         $html = str_replace('</[>', '', $html);
-        
+
         return $html;
     }
 
@@ -231,7 +234,7 @@ class FullTextExtractor
         $resolver = $this->app->make(UrlResolver::class);
 
         libxml_use_internal_errors(true);
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         $dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         libxml_clear_errors();
 
@@ -239,24 +242,28 @@ class FullTextExtractor
 
         // Process img src
         $images = $xpath->query('//img[@src]');
-        foreach ($images as $img) {
-            if ($img instanceof \DOMElement) {
-                $src = $img->getAttribute('src');
-                $absUrl = $resolver->makeAbsolute($baseUrl, $src);
-                if ($absUrl) {
-                    $img->setAttribute('src', $absUrl);
+        if ($images) {
+            foreach ($images as $img) {
+                if ($img instanceof \DOMElement) {
+                    $src = $img->getAttribute('src');
+                    $absUrl = $resolver->makeAbsolute($baseUrl, $src);
+                    if ($absUrl) {
+                        $img->setAttribute('src', $absUrl);
+                    }
                 }
             }
         }
 
         // Process a href
         $links = $xpath->query('//a[@href]');
-        foreach ($links as $link) {
-            if ($link instanceof \DOMElement) {
-                $href = $link->getAttribute('href');
-                $absUrl = $resolver->makeAbsolute($baseUrl, $href);
-                if ($absUrl) {
-                    $link->setAttribute('href', $absUrl);
+        if ($links) {
+            foreach ($links as $link) {
+                if ($link instanceof \DOMElement) {
+                    $href = $link->getAttribute('href');
+                    $absUrl = $resolver->makeAbsolute($baseUrl, $href);
+                    if ($absUrl) {
+                        $link->setAttribute('href', $absUrl);
+                    }
                 }
             }
         }
@@ -268,6 +275,7 @@ class FullTextExtractor
             foreach ($body->childNodes as $child) {
                 $result .= $dom->saveHTML($child);
             }
+
             return $result;
         }
 

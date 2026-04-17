@@ -9,6 +9,7 @@ use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\RssFeed;
 use Kalimeromk\Rssfeed\RssfeedServiceProvider;
 use Orchestra\Testbench\TestCase;
+use SimplePie\Item;
 use SimplePie\SimplePie;
 
 class RssFeedTest extends TestCase
@@ -220,7 +221,7 @@ class RssFeedTest extends TestCase
         $selector = '//div[@class="content"]';
 
         config()->set('rssfeed.content_selectors', [$domain => $selector]);
-        $this->assertEquals($selector, config("rssfeed.content_selectors")[$domain]);
+        $this->assertEquals($selector, config('rssfeed.content_selectors')[$domain]);
     }
 
     /** @test */
@@ -255,7 +256,7 @@ class RssFeedTest extends TestCase
     {
         $url = 'https://example.com/rss.xml';
 
-        $itemMock = $this->createMock(\SimplePie\Item::class);
+        $itemMock = $this->createMock(Item::class);
         $itemMock->method('get_title')->willReturn('Item 1');
         $itemMock->method('get_description')->willReturn('Desc 1');
         $itemMock->method('get_link')->willReturn('https://example.com/1');
@@ -284,7 +285,7 @@ class RssFeedTest extends TestCase
     {
         $url = 'https://example.com/rss.xml';
 
-        $itemMock = $this->createMock(\SimplePie\Item::class);
+        $itemMock = $this->createMock(Item::class);
         $itemMock->method('get_title')->willReturn('Item 1');
         $itemMock->method('get_description')->willReturn('<p>Desc 1</p><script>alert(1)</script>');
         $itemMock->method('get_link')->willReturn('https://example.com/1');

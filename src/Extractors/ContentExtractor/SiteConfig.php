@@ -6,7 +6,9 @@ declare(strict_types=1);
  * Site Config
  *
  * @version 1.1
+ *
  * @date 2017-09-25
+ *
  * @author Keyvan Minoukadeh
  * @copyright 2017 Keyvan Minoukadeh
  * @license http://www.gnu.org/licenses/agpl-3.0.html AGPL v3
@@ -106,7 +108,7 @@ class SiteConfig
             $key = mb_substr($key, 4);
         }
         self::$config_cache[$key] = $config;
-        $cacheKey = 'rssfeed_siteconfig_' . $key;
+        $cacheKey = 'rssfeed_siteconfig_'.$key;
         Cache::put($cacheKey, $config, 86400);
         self::debug("Cached site config with key $key");
     }
@@ -122,7 +124,7 @@ class SiteConfig
 
             return self::$config_cache[$key];
         }
-        $cacheKey = 'rssfeed_siteconfig_' . $key;
+        $cacheKey = 'rssfeed_siteconfig_'.$key;
         $sconfig = Cache::get($cacheKey);
         if ($sconfig instanceof self) {
             self::debug("... site config for $key found in Laravel cache");
@@ -143,7 +145,7 @@ class SiteConfig
         if (array_key_exists($key, self::$config_cache)) {
             return true;
         }
-        $cacheKey = 'rssfeed_siteconfig_' . $key;
+        $cacheKey = 'rssfeed_siteconfig_'.$key;
 
         return Cache::has($cacheKey);
     }
@@ -178,9 +180,9 @@ class SiteConfig
             if ($config = self::load_cached($h_key)) {
                 break;
             }
-            if (file_exists(self::$config_path_custom."/".$h.".txt")) {
+            if (file_exists(self::$config_path_custom.'/'.$h.'.txt')) {
                 self::debug("... found site config ($h.txt)");
-                $file_custom = self::$config_path_custom."/".$h.".txt";
+                $file_custom = self::$config_path_custom.'/'.$h.'.txt';
                 $config = self::build_from_file($file_custom);
                 break;
             }
@@ -199,9 +201,9 @@ class SiteConfig
                 if ($config_std = self::load_cached($h)) {
                     break;
                 }
-                if (file_exists(self::$config_path_fallback."/".$h.".txt")) {
+                if (file_exists(self::$config_path_fallback.'/'.$h.'.txt')) {
                     self::debug("... found site config in standard folder ($h.txt)");
-                    $file_secondary = self::$config_path_fallback."/".$h.".txt";
+                    $file_secondary = self::$config_path_fallback.'/'.$h.'.txt';
                     $config_std = self::build_from_file($file_secondary);
                     break;
                 }
@@ -216,15 +218,16 @@ class SiteConfig
         }
 
         $config_final = null;
-        if (! $config_std && $config) {
+        if (! $config_std) {
             $config_final = $config;
-        } elseif ($config_std && $config) {
+        } elseif ($config) {
             self::debug('. merging config files');
             $config->append($config_std);
             $config_final = $config;
         } else {
             $config_final = $config_std;
         }
+
         self::add_to_cache_merged($host, $exact_host_match, $config_final);
 
         return $config_final;
@@ -234,7 +237,7 @@ class SiteConfig
     {
         $key = basename($path, '.txt');
         $config_lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (! $config_lines || ! is_array($config_lines)) {
+        if (! $config_lines) {
             return false;
         }
         $config = self::build_from_array($config_lines);
@@ -253,11 +256,11 @@ class SiteConfig
     }
 
     /**
-     * @param array<int, string> $lines
+     * @param  array<int, string>  $lines
      */
     public static function build_from_array(array $lines): self
     {
-        $config = new self();
+        $config = new self;
         foreach ($lines as $line) {
             $line = mb_trim($line);
 
@@ -485,7 +488,7 @@ class SiteConfig
             $key = $host.'.merged';
         }
         if (! isset($config)) {
-            $config = new self();
+            $config = new self;
         }
         self::add_to_cache($key, $config);
     }

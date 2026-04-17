@@ -14,9 +14,9 @@ use HTMLPurifier_Config;
  */
 class HtmlSanitizerService
 {
-    private ?HTMLPurifier $purifier = null;
+    private HTMLPurifier $purifier;
 
-    private ?HTMLPurifier $purifierNoStyles = null;
+    private HTMLPurifier $purifierNoStyles;
 
     /** @var array<string, mixed> */
     private array $defaultConfig = [
@@ -138,16 +138,18 @@ class HtmlSanitizerService
     public function cleanInlineStyles(string $html): string
     {
         libxml_use_internal_errors(true);
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         $dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         libxml_clear_errors();
 
         $xpath = new \DOMXPath($dom);
         $elements = $xpath->query('//*[@style]');
 
-        foreach ($elements as $element) {
-            if ($element instanceof \DOMElement) {
-                $element->removeAttribute('style');
+        if ($elements) {
+            foreach ($elements as $element) {
+                if ($element instanceof \DOMElement) {
+                    $element->removeAttribute('style');
+                }
             }
         }
 
@@ -158,6 +160,7 @@ class HtmlSanitizerService
             foreach ($body->childNodes as $child) {
                 $result .= $dom->saveHTML($child);
             }
+
             return $result;
         }
 

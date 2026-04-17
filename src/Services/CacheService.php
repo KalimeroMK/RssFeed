@@ -34,7 +34,7 @@ class CacheService
             return null;
         }
 
-        $value = Cache::get($this->prefix . $key);
+        $value = Cache::get($this->prefix.$key);
 
         return is_string($value) ? $value : null;
     }
@@ -48,7 +48,7 @@ class CacheService
             return false;
         }
 
-        return Cache::put($this->prefix . $key, $value, $ttl ?? $this->ttl);
+        return Cache::put($this->prefix.$key, $value, $ttl ?? $this->ttl);
     }
 
     /**
@@ -60,7 +60,7 @@ class CacheService
             return false;
         }
 
-        return Cache::has($this->prefix . $key);
+        return Cache::has($this->prefix.$key);
     }
 
     /**
@@ -68,7 +68,7 @@ class CacheService
      */
     public function delete(string $key): bool
     {
-        return Cache::forget($this->prefix . $key);
+        return Cache::forget($this->prefix.$key);
     }
 
     /**
@@ -99,7 +99,6 @@ class CacheService
     /**
      * Remember value from cache or execute callback
      *
-     * @param  callable  $callback
      * @return mixed
      */
     public function remember(string $key, ?int $ttl, callable $callback)
@@ -108,6 +107,6 @@ class CacheService
             return $callback();
         }
 
-        return Cache::remember($this->prefix . $key, $ttl ?? $this->ttl, $callback);
+        return Cache::remember($this->prefix.$key, $ttl ?? $this->ttl, $callback);
     }
 }

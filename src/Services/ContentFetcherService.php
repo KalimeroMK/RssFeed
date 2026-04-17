@@ -56,7 +56,7 @@ class ContentFetcherService
 
             $xpath = new DOMXPath($dom);
 
-            $converter = new CssSelectorConverter();
+            $converter = new CssSelectorConverter;
             $this->removeUnwantedElements($dom, $xpath, $converter);
 
             $domain = parse_url($postUrl, PHP_URL_HOST);
@@ -102,6 +102,7 @@ class ContentFetcherService
                 }
             } catch (\InvalidArgumentException $e) {
                 Log::warning('Invalid CSS selector for removal', ['selector' => $selector, 'error' => $e->getMessage()]);
+
                 continue;
             }
         }
@@ -111,7 +112,10 @@ class ContentFetcherService
     {
         $charset = $this->detectCharset($html);
         if ($charset && strtoupper($charset) !== 'UTF-8') {
-            $html = iconv($charset, 'UTF-8//IGNORE', $html);
+            $converted = iconv($charset, 'UTF-8//IGNORE', $html);
+            if ($converted !== false) {
+                $html = $converted;
+            }
         }
 
         $dom->loadHTML($html);

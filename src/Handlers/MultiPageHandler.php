@@ -95,6 +95,7 @@ class MultiPageHandler
             ];
         } catch (\Exception $e) {
             Log::error('Error fetching multi-page', ['url' => $url, 'error' => $e->getMessage()]);
+
             return null;
         }
     }

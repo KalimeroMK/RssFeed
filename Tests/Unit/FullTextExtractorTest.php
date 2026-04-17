@@ -26,20 +26,20 @@ class FullTextExtractorTest extends TestCase
 
     private function longArticleContent(): string
     {
-        return '<p>This is the main content of the article. It contains enough text to satisfy ' .
-            'the readability algorithm which requires at least two hundred and fifty characters ' .
-            'of meaningful text before it will consider the extraction successful. ' .
-            'We are adding several more sentences here to make absolutely sure that ' .
-            'the content extraction process works correctly in our unit tests.</p>' .
-            '<p>Here is a second paragraph with even more text to increase the overall ' .
+        return '<p>This is the main content of the article. It contains enough text to satisfy '.
+            'the readability algorithm which requires at least two hundred and fifty characters '.
+            'of meaningful text before it will consider the extraction successful. '.
+            'We are adding several more sentences here to make absolutely sure that '.
+            'the content extraction process works correctly in our unit tests.</p>'.
+            '<p>Here is a second paragraph with even more text to increase the overall '.
             'character count well above the required minimum threshold.</p>';
     }
 
     /** @test */
     public function it_can_extract_content_from_html(): void
     {
-        $html = '<html><head><title>Test Article</title></head><body>' .
-            '<article><h1>Test Article</h1>' . $this->longArticleContent() . '</article>' .
+        $html = '<html><head><title>Test Article</title></head><body>'.
+            '<article><h1>Test Article</h1>'.$this->longArticleContent().'</article>'.
             '</body></html>';
 
         $result = $this->extractor->extractFromHtml($html, 'https://example.com/article');
@@ -60,8 +60,8 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_detects_language_from_content(): void
     {
-        $html = '<html><head><title>Test</title></head><body>' .
-            '<article><h1>Test</h1>' . $this->longArticleContent() . '</article>' .
+        $html = '<html><head><title>Test</title></head><body>'.
+            '<article><h1>Test</h1>'.$this->longArticleContent().'</article>'.
             '</body></html>';
 
         $result = $this->extractor->extractFromHtml($html, 'https://example.com/article');
@@ -73,14 +73,14 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_makes_urls_absolute(): void
     {
-        $html = '<html><body>' .
-            '<article><h1>Title</h1>' .
-            '<p>Content with enough text to pass the readability threshold. ' .
-            'We need at least two hundred and fifty characters for the algorithm to succeed. ' .
-            'This paragraph adds more words to ensure we cross that limit comfortably. ' .
-            'Here is an image: <img src="/image.jpg" /> and a link: <a href="/page">link</a>. ' .
-            'More text follows to keep the content above the minimum required length.</p>' .
-            '</article>' .
+        $html = '<html><body>'.
+            '<article><h1>Title</h1>'.
+            '<p>Content with enough text to pass the readability threshold. '.
+            'We need at least two hundred and fifty characters for the algorithm to succeed. '.
+            'This paragraph adds more words to ensure we cross that limit comfortably. '.
+            'Here is an image: <img src="/image.jpg" /> and a link: <a href="/page">link</a>. '.
+            'More text follows to keep the content above the minimum required length.</p>'.
+            '</article>'.
             '</body></html>';
 
         config()->set('rssfeed.rewrite_relative_urls', true);
@@ -94,8 +94,8 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_can_extract_from_url(): void
     {
-        $html = '<html><head><title>Remote Article</title></head><body>' .
-            '<article><h1>Remote Article</h1>' . $this->longArticleContent() . '</article>' .
+        $html = '<html><head><title>Remote Article</title></head><body>'.
+            '<article><h1>Remote Article</h1>'.$this->longArticleContent().'</article>'.
             '</body></html>';
 
         Http::fake([
@@ -123,8 +123,8 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_returns_metadata(): void
     {
-        $html = '<html><head><title>Article Title</title></head><body>' .
-            '<article><h1>Article Title</h1>' . $this->longArticleContent() . '</article>' .
+        $html = '<html><head><title>Article Title</title></head><body>'.
+            '<article><h1>Article Title</h1>'.$this->longArticleContent().'</article>'.
             '</body></html>';
 
         $result = $this->extractor->extractFromHtml($html, 'https://example.com/article');
@@ -140,16 +140,16 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_strips_unwanted_elements(): void
     {
-        $html = '<html><head><title>Title</title></head><body>' .
-            '<article>' .
-            '<h1>Title</h1>' .
-            '<p>Main content with enough text to pass the readability threshold. ' .
-            'We need at least two hundred and fifty characters for the algorithm to succeed. ' .
-            'This paragraph adds more words to ensure we cross that limit comfortably.</p>' .
-            '<div class="donation-form">Donate now!</div>' .
-            '<div class="share-buttons">Share</div>' .
-            '<p>Additional paragraph to make sure the total text length is well above minimum.</p>' .
-            '</article>' .
+        $html = '<html><head><title>Title</title></head><body>'.
+            '<article>'.
+            '<h1>Title</h1>'.
+            '<p>Main content with enough text to pass the readability threshold. '.
+            'We need at least two hundred and fifty characters for the algorithm to succeed. '.
+            'This paragraph adds more words to ensure we cross that limit comfortably.</p>'.
+            '<div class="donation-form">Donate now!</div>'.
+            '<div class="share-buttons">Share</div>'.
+            '<p>Additional paragraph to make sure the total text length is well above minimum.</p>'.
+            '</article>'.
             '</body></html>';
 
         $result = $this->extractor->extractFromHtml($html, 'https://example.com/article');
@@ -163,15 +163,15 @@ class FullTextExtractorTest extends TestCase
     /** @test */
     public function it_handles_different_encodings(): void
     {
-        $html = '<html><head><meta charset="ISO-8859-1"><title>Encoding Test</title></head><body>' .
-            '<article><h1>Encoding Test</h1>' .
-            "<p>This is the main content with special ISO-8859-1 chars: \xe9 and \xfc. " .
-            'It contains enough text to satisfy the readability algorithm which requires ' .
-            'at least two hundred and fifty characters of meaningful text before it will ' .
-            'consider the extraction successful. We are adding several more sentences ' .
-            'here to make absolutely sure that the content extraction works.</p>' .
-            '<p>Here is a second paragraph with even more text to increase the overall ' .
-            'character count well above the required minimum threshold.</p>' .
+        $html = '<html><head><meta charset="ISO-8859-1"><title>Encoding Test</title></head><body>'.
+            '<article><h1>Encoding Test</h1>'.
+            "<p>This is the main content with special ISO-8859-1 chars: \xe9 and \xfc. ".
+            'It contains enough text to satisfy the readability algorithm which requires '.
+            'at least two hundred and fifty characters of meaningful text before it will '.
+            'consider the extraction successful. We are adding several more sentences '.
+            'here to make absolutely sure that the content extraction works.</p>'.
+            '<p>Here is a second paragraph with even more text to increase the overall '.
+            'character count well above the required minimum threshold.</p>'.
             '</article></body></html>';
 
         $result = $this->extractor->extractFromHtml($html, 'https://example.com/article');

@@ -23,7 +23,7 @@ class FeedOutputService
         $xml = '<?xml version="1.0" encoding="UTF-8"?'.'>'.PHP_EOL;
         $xml .= '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">'.PHP_EOL;
         $xml .= '<channel>'.PHP_EOL;
-        
+
         // Channel elements
         $xml .= $this->cdataElement('title', $feedData['title'] ?? 'RSS Feed');
         $xml .= $this->element('link', $feedData['link'] ?? '');
@@ -54,13 +54,13 @@ class FeedOutputService
     {
         $xml = '<?xml version="1.0" encoding="UTF-8"?'.'>'.PHP_EOL;
         $xml .= '<feed xmlns="http://www.w3.org/2005/Atom">'.PHP_EOL;
-        
+
         // Feed elements
         $xml .= $this->cdataElement('title', $feedData['title'] ?? 'Atom Feed');
         $xml .= $this->element('link', '', ['href' => $feedData['link'] ?? '']);
         $xml .= $this->cdataElement('subtitle', $feedData['description'] ?? '');
         $xml .= $this->element('updated', $this->formatAtomDate(time()));
-        $xml .= $this->element('id', $feedData['link'] ?? 'urn:uuid:' . $this->generateUuid());
+        $xml .= $this->element('id', $feedData['link'] ?? 'urn:uuid:'.$this->generateUuid());
         $xml .= $this->element('generator', 'Laravel RssFeed Package');
 
         // Entries
@@ -107,7 +107,7 @@ class FeedOutputService
         }
 
         if ($callback !== null) {
-            return $callback . '(' . $json . ');';
+            return $callback.'('.$json.');';
         }
 
         return $json;
@@ -121,16 +121,16 @@ class FeedOutputService
     private function rssItem(array $data): string
     {
         $xml = '<item>'.PHP_EOL;
-        
+
         $xml .= $this->cdataElement('title', $this->stripTags($data['title'] ?? 'Untitled'));
         $xml .= $this->element('link', $data['link'] ?? '');
         $xml .= $this->element('guid', $data['effective_url'] ?? ($data['link'] ?? ''));
         $xml .= $this->element('pubDate', $this->formatRssDate($data['date'] ?? null));
-        
+
         if (! empty($data['author'])) {
             $xml .= $this->cdataElement('dc:creator', is_string($data['author']) ? $data['author'] : (string) $data['author']);
         }
-        
+
         if (! empty($data['language'])) {
             $xml .= $this->element('dc:language', $data['language']);
         }
@@ -169,12 +169,12 @@ class FeedOutputService
     private function atomEntry(array $data): string
     {
         $xml = '<entry>'.PHP_EOL;
-        
+
         $xml .= $this->cdataElement('title', $this->stripTags($data['title'] ?? 'Untitled'));
         $xml .= $this->element('link', '', ['href' => $data['link'] ?? '']);
-        $xml .= $this->element('id', $data['effective_url'] ?? ($data['link'] ?? 'urn:uuid:' . $this->generateUuid()));
+        $xml .= $this->element('id', $data['effective_url'] ?? ($data['link'] ?? 'urn:uuid:'.$this->generateUuid()));
         $xml .= $this->element('updated', $this->formatAtomDate($data['date'] ?? time()));
-        
+
         if (! empty($data['author'])) {
             $xml .= '<author>'.PHP_EOL;
             $xml .= $this->element('name', is_string($data['author']) ? $data['author'] : (string) $data['author']);
@@ -246,14 +246,14 @@ class FeedOutputService
     {
         $attrs = '';
         foreach ($attributes as $key => $val) {
-            $attrs .= ' ' . $key . '="' . htmlspecialchars($val, ENT_QUOTES, 'UTF-8') . '"';
+            $attrs .= ' '.$key.'="'.htmlspecialchars($val, ENT_QUOTES, 'UTF-8').'"';
         }
 
         if (empty($value) && empty($attributes)) {
-            return '<' . $name . '/>' . PHP_EOL;
+            return '<'.$name.'/>'.PHP_EOL;
         }
 
-        return '<' . $name . $attrs . '>' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</' . $name . '>' . PHP_EOL;
+        return '<'.$name.$attrs.'>'.htmlspecialchars($value, ENT_QUOTES, 'UTF-8').'</'.$name.'>'.PHP_EOL;
     }
 
     /**
@@ -263,10 +263,10 @@ class FeedOutputService
     {
         $attrs = '';
         foreach ($attributes as $key => $val) {
-            $attrs .= ' ' . $key . '="' . htmlspecialchars($val, ENT_QUOTES, 'UTF-8') . '"';
+            $attrs .= ' '.$key.'="'.htmlspecialchars($val, ENT_QUOTES, 'UTF-8').'"';
         }
 
-        return '<' . $name . $attrs . '><![CDATA[' . $value . ']]></' . $name . '>' . PHP_EOL;
+        return '<'.$name.$attrs.'><![CDATA['.$value.']]></'.$name.'>'.PHP_EOL;
     }
 
     /**
@@ -275,10 +275,10 @@ class FeedOutputService
     private function enclosureElement(string $url): string
     {
         $type = $this->getMimeType($url);
-        
+
         // Note: We don't know the length without fetching the file
         // Many RSS readers are okay without the length attribute
-        return '<enclosure url="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" type="' . $type . '"/>' . PHP_EOL;
+        return '<enclosure url="'.htmlspecialchars($url, ENT_QUOTES, 'UTF-8').'" type="'.$type.'"/>'.PHP_EOL;
     }
 
     /**
@@ -287,7 +287,7 @@ class FeedOutputService
     private function getMimeType(string $url): string
     {
         $extension = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
-        
+
         $types = [
             'jpg' => 'image/jpeg',
             'jpeg' => 'image/jpeg',
@@ -396,14 +396,14 @@ class FeedOutputService
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff)
+            mt_rand(0, 0xFFFF),
+            mt_rand(0, 0xFFFF),
+            mt_rand(0, 0xFFFF),
+            mt_rand(0, 0x0FFF) | 0x4000,
+            mt_rand(0, 0x3FFF) | 0x8000,
+            mt_rand(0, 0xFFFF),
+            mt_rand(0, 0xFFFF),
+            mt_rand(0, 0xFFFF)
         );
     }
 }

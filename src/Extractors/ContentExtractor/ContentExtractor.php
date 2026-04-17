@@ -20,7 +20,6 @@ declare(strict_types=1);
 namespace Kalimeromk\Rssfeed\Extractors\ContentExtractor;
 
 use DOMAttr;
-use DOMDocument;
 use DOMElement;
 use DOMException;
 use DOMNodeList;
@@ -157,7 +156,7 @@ class ContentExtractor
         }
         $config = SiteConfig::build($host);
         if (! $config) {
-            $config = new SiteConfig();
+            $config = new SiteConfig;
         }
         if ($config->autodetect_on_failure()) {
             if (! empty($this->fingerprints) && ($_fphost = $this->findHostUsingFingerprints($html))) {

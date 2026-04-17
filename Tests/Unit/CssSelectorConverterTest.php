@@ -14,7 +14,7 @@ class CssSelectorConverterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->converter = new CssSelectorConverter();
+        $this->converter = new CssSelectorConverter;
     }
 
     /** @test */

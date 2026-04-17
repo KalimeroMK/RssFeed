@@ -14,7 +14,7 @@ class HtmlCleanerServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->cleaner = new HtmlCleanerService();
+        $this->cleaner = new HtmlCleanerService;
     }
 
     /** @test */

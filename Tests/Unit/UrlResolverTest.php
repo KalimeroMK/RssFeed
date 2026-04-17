@@ -14,7 +14,7 @@ class UrlResolverTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->resolver = new UrlResolver();
+        $this->resolver = new UrlResolver;
     }
 
     /** @test */

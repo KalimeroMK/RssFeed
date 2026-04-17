@@ -3,6 +3,9 @@
 namespace Kalimeromk\Rssfeed;
 
 use Illuminate\Support\ServiceProvider;
+use Kalimeromk\Rssfeed\Extractors\ContentExtractor\ContentExtractor;
+use Kalimeromk\Rssfeed\Handlers\MultiPageHandler;
+use Kalimeromk\Rssfeed\Handlers\SinglePageHandler;
 use Kalimeromk\Rssfeed\Services\CacheService;
 use Kalimeromk\Rssfeed\Services\ContentFetcherService;
 use Kalimeromk\Rssfeed\Services\CssSelectorConverter;
@@ -12,9 +15,6 @@ use Kalimeromk\Rssfeed\Services\HtmlSanitizerService;
 use Kalimeromk\Rssfeed\Services\LanguageDetectionService;
 use Kalimeromk\Rssfeed\Services\SecurityValidator;
 use Kalimeromk\Rssfeed\Services\UrlResolver;
-use Kalimeromk\Rssfeed\Extractors\ContentExtractor\ContentExtractor;
-use Kalimeromk\Rssfeed\Handlers\MultiPageHandler;
-use Kalimeromk\Rssfeed\Handlers\SinglePageHandler;
 
 class RssfeedServiceProvider extends ServiceProvider
 {
@@ -57,47 +57,47 @@ class RssfeedServiceProvider extends ServiceProvider
     {
         // Cache Service
         $this->app->singleton(CacheService::class, function () {
-            return new CacheService();
+            return new CacheService;
         });
 
         // HTML Sanitizer Service
         $this->app->singleton(HtmlSanitizerService::class, function () {
-            return new HtmlSanitizerService();
+            return new HtmlSanitizerService;
         });
 
         // Security Validator
         $this->app->singleton(SecurityValidator::class, function () {
-            return new SecurityValidator();
+            return new SecurityValidator;
         });
 
         // Language Detection Service
         $this->app->singleton(LanguageDetectionService::class, function () {
-            return new LanguageDetectionService();
+            return new LanguageDetectionService;
         });
 
         // Feed Output Service
         $this->app->singleton(FeedOutputService::class, function () {
-            return new FeedOutputService();
+            return new FeedOutputService;
         });
 
         // Content Fetcher Service
         $this->app->singleton(ContentFetcherService::class, function () {
-            return new ContentFetcherService();
+            return new ContentFetcherService;
         });
 
         // HTML Cleaner Service
         $this->app->singleton(HtmlCleanerService::class, function () {
-            return new HtmlCleanerService();
+            return new HtmlCleanerService;
         });
 
         // CSS Selector Converter
         $this->app->singleton(CssSelectorConverter::class, function () {
-            return new CssSelectorConverter();
+            return new CssSelectorConverter;
         });
 
         // URL Resolver
         $this->app->singleton(UrlResolver::class, function () {
-            return new UrlResolver();
+            return new UrlResolver;
         });
 
         // Content Extractor
@@ -114,7 +114,7 @@ class RssfeedServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(SinglePageHandler::class, function () {
-            return new SinglePageHandler();
+            return new SinglePageHandler;
         });
 
         // Main RssFeed class

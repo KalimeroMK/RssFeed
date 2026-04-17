@@ -31,7 +31,7 @@ class SecurityValidator
         if ($hash !== null && $url !== null) {
             $keyIndex = (int) $key;
             if (isset($apiKeys[$keyIndex])) {
-                $expectedHash = sha1($apiKeys[$keyIndex] . $url);
+                $expectedHash = sha1($apiKeys[$keyIndex].$url);
 
                 return $hash === $expectedHash;
             }
