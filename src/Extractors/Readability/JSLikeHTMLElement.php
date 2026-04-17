@@ -37,8 +37,7 @@ class JSLikeHTMLElement extends DOMElement
                 } else {
                     // $value is probably ill-formed
                     $f = new \DOMDocument();
-                    $value = mb_convert_encoding((string) $value, 'HTML-ENTITIES', 'UTF-8');
-                    $result = @$f->loadHTML('<htmlfragment>'.$value.'</htmlfragment>');
+                    $result = @$f->loadHTML('<?xml encoding="UTF-8"?><htmlfragment>'.(string) $value.'</htmlfragment>');
                     if ($result) {
                         $import = $f->getElementsByTagName('htmlfragment')->item(0);
                         if ($import !== null) {

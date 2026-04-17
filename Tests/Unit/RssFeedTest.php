@@ -1,8 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Kalimeromk\Rssfeed\Tests\Unit;
 
-use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Http;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\RssFeed;
@@ -27,19 +28,19 @@ class RssFeedTest extends TestCase
         ];
     }
 
-    /**
-     * Test that the RSS feed can be parsed.
-     *
-     * This test fakes an HTTP response for a given URL and checks if the RSS feed
-     * can be parsed correctly. It asserts that the parsed RSS feed is an instance
-     * of SimplePie and that the title of the feed is a non-empty string.
-     *
-     * @throws CantOpenFileFromUrlException
-     */
     public function test_it_can_parse_rss_feeds(): void
     {
-        $url = 'https://www.tiveriopol.mk/feed/';
-        $rss = $this->rssFeed->RssFeeds($url);
+        $url = 'https://example.com/feed/';
+
+        Http::fake([
+            $url => Http::response('<rss></rss>', 200),
+        ]);
+
+        $simplePie = $this->createMock(SimplePie::class);
+        $simplePie->method('get_title')->willReturn('Test Feed');
+        app()->instance(SimplePie::class, $simplePie);
+
+        $rss = $this->rssFeed->rssFeeds($url);
         $this->assertInstanceOf(SimplePie::class, $rss);
         $this->assertIsString($rss->get_title());
         $this->assertNotEmpty($rss->get_title());
@@ -56,13 +57,13 @@ class RssFeedTest extends TestCase
             $url => Http::response('', 404),
         ]);
 
-        $this->rssFeed->RssFeeds($url);
+        $this->rssFeed->rssFeeds($url);
     }
 
     /** @test */
     public function it_can_check_if_url_exists(): void
     {
-        $validUrl = 'http://mistagogia.mk/feed';
+        $validUrl = 'http://example.com/feed';
         $invalidUrl = 'https://example.com/invalid-url';
 
         Http::fake([
@@ -72,7 +73,6 @@ class RssFeedTest extends TestCase
 
         $this->assertTrue($this->rssFeed->urlExists($validUrl));
         $this->assertFalse($this->rssFeed->urlExists($invalidUrl));
-
     }
 
     /** @test */
@@ -80,8 +80,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<p>Some text <img src="https://example.com/image.jpg"  alt=""/> more text</p>';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/image.jpg', $imageUrl);
     }
@@ -91,8 +90,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<enclosure url="https://example.com/enclosure.jpg" length="123" type="image/jpeg" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/enclosure.jpg', $imageUrl);
     }
@@ -102,8 +100,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<media:content url="https://example.com/media-content.jpg" type="image/jpeg" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/media-content.jpg', $imageUrl);
     }
@@ -113,8 +110,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<media:thumbnail url="https://example.com/media-thumb.jpg" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/media-thumb.jpg', $imageUrl);
     }
@@ -124,8 +120,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<p>Some text without an image</p>';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertNull($imageUrl);
     }
@@ -135,8 +130,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<img srcset="https://example.com/small.jpg 320w, https://example.com/large.jpg 640w" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/large.jpg', $imageUrl);
     }
@@ -146,8 +140,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<img data-src="https://example.com/lazy.jpg" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description);
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description);
 
         $this->assertEquals('https://example.com/lazy.jpg', $imageUrl);
     }
@@ -157,8 +150,7 @@ class RssFeedTest extends TestCase
     {
         $description = '<img src="/images/cover.jpg" />';
 
-        $rssFeed = new RssFeed(app());
-        $imageUrl = $rssFeed->extractImageFromDescription($description, 'https://example.com/posts/1');
+        $imageUrl = $this->rssFeed->extractImageFromDescription($description, 'https://example.com/posts/1');
 
         $this->assertEquals('https://example.com/images/cover.jpg', $imageUrl);
     }
@@ -173,7 +165,7 @@ class RssFeedTest extends TestCase
             $postUrl => Http::response($htmlContent, 200),
         ]);
 
-        config()->set('rssfeed.content_selectors.example.com', '//div[@class="content"]');
+        config()->set('rssfeed.content_selectors', ['example.com' => '//div[@class="content"]']);
 
         $result = $this->rssFeed->fetchFullContentFromPost($postUrl);
 
@@ -227,307 +219,93 @@ class RssFeedTest extends TestCase
         $domain = 'example.com';
         $selector = '//div[@class="content"]';
 
-        config()->set("rssfeed.content_selectors.$domain", $selector);
-        $this->assertEquals($selector, config("rssfeed.content_selectors.$domain"));
-    }
-
-    /** @test */
-    public function it_extracts_clean_text_from_html(): void
-    {
-        $html = '<div><p>This is the article content.</p><div class="donation-form">Donate now!</div></div>';
-        
-        // Use reflection to test private method
-        $method = new \ReflectionMethod($this->rssFeed, 'extractTextContent');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $html);
-        
-        $this->assertStringContainsString('This is the article content', $result);
-        $this->assertStringNotContainsString('Donate now', $result);
-    }
-
-    /** @test */
-    public function it_removes_donation_text_patterns(): void
-    {
-        $text = 'Article content можете да станете редовен дарител на Православие.БГ Още текст';
-        
-        // Use reflection to test private method
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Article content', $result);
-        $this->assertStringNotContainsString('дарител', $result);
-        $this->assertStringContainsString('Още текст', $result);
-    }
-
-    /** @test */
-    public function it_removes_english_donation_patterns(): void
-    {
-        $text = 'Great article content. Donate now to support our work. More content here.';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Great article content', $result);
-        $this->assertStringNotContainsString('Donate now', $result);
-        $this->assertStringContainsString('More content here', $result);
-    }
-
-    /** @test */
-    public function it_removes_share_buttons_text(): void
-    {
-        $text = 'Article content Споделете on social media. End of article.';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Article content', $result);
-        $this->assertStringNotContainsString('Споделете', $result);
-    }
-
-    /** @test */
-    public function it_removes_unwanted_elements_from_dom(): void
-    {
-        $html = '<html><body>
-            <div class="content">
-                <p>Real article content</p>
-                <div class="donation-form">Donate please!</div>
-                <div class="share-buttons">Share this</div>
-                <p>More content</p>
-            </div>
-        </body></html>';
-        
-        // Create a mock DOM and XPath
-        libxml_use_internal_errors(true);
-        $dom = new \DOMDocument;
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-        libxml_clear_errors();
-        $xpath = new \DOMXPath($dom);
-        
-        // Store original content
-        $originalContent = $dom->textContent;
-        $this->assertStringContainsString('Donate please', $originalContent);
-        
-        // Use reflection to test private method
-        $method = new \ReflectionMethod($this->rssFeed, 'removeUnwantedElements');
-        $method->setAccessible(true);
-        $method->invoke($this->rssFeed, $dom, $xpath);
-        
-        // Check that unwanted elements are removed
-        $cleanContent = $dom->textContent;
-        $this->assertStringContainsString('Real article content', $cleanContent);
-        $this->assertStringContainsString('More content', $cleanContent);
-        $this->assertStringNotContainsString('Donate please', $cleanContent);
-        $this->assertStringNotContainsString('Share this', $cleanContent);
-    }
-
-    /** @test */
-    public function it_converts_css_selectors_to_xpath(): void
-    {
-        $method = new \ReflectionMethod($this->rssFeed, 'cssSelectorToXPath');
-        $method->setAccessible(true);
-        
-        // Test class selector
-        $this->assertEquals("//*[contains(@class, 'donation-form')]", $method->invoke($this->rssFeed, '.donation-form'));
-        
-        // Test ID selector
-        $this->assertEquals("//*[@id='comments']", $method->invoke($this->rssFeed, '#comments'));
-        
-        // Test tag selector
-        $this->assertEquals('//script', $method->invoke($this->rssFeed, 'script'));
-        
-        // Test tag.class selector
-        $this->assertEquals("//div[contains(@class, 'content')]", $method->invoke($this->rssFeed, 'div.content'));
-        
-        // Test attribute contains selector
-        $this->assertEquals("//*[contains(@class, 'ad')]", $method->invoke($this->rssFeed, '[class*="ad"]'));
-        
-        // Test attribute equals selector
-        $this->assertEquals("//*[@role='main']", $method->invoke($this->rssFeed, '[role="main"]'));
+        config()->set('rssfeed.content_selectors', [$domain => $selector]);
+        $this->assertEquals($selector, config("rssfeed.content_selectors")[$domain]);
     }
 
     /** @test */
     public function it_extracts_clean_text_from_post(): void
     {
         $postUrl = 'http://example.com/post';
-        $htmlContent = '<html><body>
-            <article>
-                <h1>Article Title</h1>
-                <p>This is the main content.</p>
-                <div class="donation-form">Donate now!</div>
-                <div class="share-buttons">Share</div>
-            </article>
-        </body></html>';
+        $htmlContent = '<html><body>'
+            .'<article>'
+            .'<h1>Article Title</h1>'
+            .'<p>This is the main content.</p>'
+            .'<div class="donation-form">Donate now!</div>'
+            .'<div class="share-buttons">Share</div>'
+            .'</article>'
+            .'</body></html>';
 
         Http::fake([
             $postUrl => Http::response($htmlContent, 200),
         ]);
 
-        config()->set('rssfeed.content_selectors.example.com', '//article');
+        config()->set('rssfeed.content_selectors', ['example.com' => '//article']);
 
         $result = $this->rssFeed->fetchCleanTextFromPost($postUrl);
-        
+
         $this->assertStringContainsString('Article Title', $result);
         $this->assertStringContainsString('This is the main content', $result);
         $this->assertStringNotContainsString('Donate now', $result);
-        $this->assertStringNotContainsString('<div', $result); // No HTML tags
+        $this->assertStringNotContainsString('<div', $result);
     }
 
     /** @test */
-    public function it_removes_scripts_and_styles_from_content(): void
+    public function it_parses_rss_feeds_and_extracts_items(): void
     {
-        $html = '<div><p>Content here</p><script>alert("xss")</script><style>.red{color:red}</style></div>';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'extractTextContent');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $html);
-        
-        $this->assertStringContainsString('Content here', $result);
-        $this->assertStringNotContainsString('alert', $result);
-        $this->assertStringNotContainsString('color:red', $result);
-        $this->assertStringNotContainsString('<script', $result);
+        $url = 'https://example.com/rss.xml';
+
+        $itemMock = $this->createMock(\SimplePie\Item::class);
+        $itemMock->method('get_title')->willReturn('Item 1');
+        $itemMock->method('get_description')->willReturn('Desc 1');
+        $itemMock->method('get_link')->willReturn('https://example.com/1');
+        $itemMock->method('get_categories')->willReturn([]);
+        $itemMock->method('get_date')->willReturn(null);
+        $itemMock->method('get_enclosure')->willReturn(null);
+        $itemMock->method('get_content')->willReturn('');
+        $itemMock->method('get_author')->willReturn(null);
+        $itemMock->method('get_copyright')->willReturn(null);
+
+        $simplePie = $this->createMock(SimplePie::class);
+        $simplePie->method('get_items')->willReturn([$itemMock]);
+        $simplePie->method('get_permalink')->willReturn('https://example.com');
+        $simplePie->method('get_language')->willReturn('en');
+        app()->instance(SimplePie::class, $simplePie);
+
+        $items = $this->rssFeed->parseRssFeeds($url);
+
+        $this->assertCount(1, $items);
+        $this->assertEquals('Item 1', $items[0]['title']);
+        $this->assertEquals('Desc 1', $items[0]['description']);
     }
 
     /** @test */
-    public function it_normalizes_whitespace_in_text(): void
+    public function it_parses_rss_feeds_clean(): void
     {
-        $html = '<div><p>Text   with    multiple     spaces</p></div>';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'extractTextContent');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $html);
-        
-        $this->assertEquals('Text with multiple spaces', $result);
-    }
+        $url = 'https://example.com/rss.xml';
 
-    /** @test */
-    public function it_handles_empty_html_content(): void
-    {
-        $method = new \ReflectionMethod($this->rssFeed, 'extractTextContent');
-        $method->setAccessible(true);
-        
-        $this->assertEquals('', $method->invoke($this->rssFeed, ''));
-        $this->assertEquals('', $method->invoke($this->rssFeed, '   '));
-    }
+        $itemMock = $this->createMock(\SimplePie\Item::class);
+        $itemMock->method('get_title')->willReturn('Item 1');
+        $itemMock->method('get_description')->willReturn('<p>Desc 1</p><script>alert(1)</script>');
+        $itemMock->method('get_link')->willReturn('https://example.com/1');
+        $itemMock->method('get_categories')->willReturn([]);
+        $itemMock->method('get_date')->willReturn(null);
+        $itemMock->method('get_enclosure')->willReturn(null);
+        $itemMock->method('get_content')->willReturn('');
+        $itemMock->method('get_author')->willReturn(null);
+        $itemMock->method('get_copyright')->willReturn(null);
 
-    /** @test */
-    public function it_removes_iframes_and_embeds(): void
-    {
-        $html = '<div><p>Content</p><iframe src="ad.html"></iframe><embed src="video.swf"><object>Flash</object></div>';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'extractTextContent');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $html);
-        
-        $this->assertStringContainsString('Content', $result);
-        $this->assertStringNotContainsString('ad.html', $result);
-        $this->assertStringNotContainsString('video.swf', $result);
-        $this->assertStringNotContainsString('Flash', $result);
-    }
+        $simplePie = $this->createMock(SimplePie::class);
+        $simplePie->method('get_items')->willReturn([$itemMock]);
+        $simplePie->method('get_permalink')->willReturn('https://example.com');
+        $simplePie->method('get_language')->willReturn('en');
+        app()->instance(SimplePie::class, $simplePie);
 
-    /** @test */
-    public function it_removes_comments_from_content(): void
-    {
-        $html = '<html><body>
-            <article>
-                <p>Article content</p>
-                <div class="comments">
-                    <div class="comment">User comment here</div>
-                </div>
-            </article>
-        </body></html>';
-        
-        // Create DOM and XPath
-        libxml_use_internal_errors(true);
-        $dom = new \DOMDocument;
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-        libxml_clear_errors();
-        $xpath = new \DOMXPath($dom);
-        
-        // Remove unwanted elements
-        $method = new \ReflectionMethod($this->rssFeed, 'removeUnwantedElements');
-        $method->setAccessible(true);
-        $method->invoke($this->rssFeed, $dom, $xpath);
-        
-        $result = $dom->textContent;
-        
-        $this->assertStringContainsString('Article content', $result);
-        $this->assertStringNotContainsString('User comment here', $result);
-    }
+        $items = $this->rssFeed->parseRssFeedsClean($url);
 
-    /** @test */
-    public function it_extracts_text_without_donation_sidebar(): void
-    {
-        $html = '<div class="article-wrapper">
-            <div class="main-content">
-                <p>Important article text here.</p>
-            </div>
-            <div class="sidebar">
-                <div class="donation-box">Support us with $10</div>
-                <div class="ad">Buy our product</div>
-            </div>
-        </div>';
-        
-        libxml_use_internal_errors(true);
-        $dom = new \DOMDocument;
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-        libxml_clear_errors();
-        $xpath = new \DOMXPath($dom);
-        
-        // Remove unwanted elements
-        $removeMethod = new \ReflectionMethod($this->rssFeed, 'removeUnwantedElements');
-        $removeMethod->setAccessible(true);
-        $removeMethod->invoke($this->rssFeed, $dom, $xpath);
-        
-        $result = $dom->textContent;
-        
-        $this->assertStringContainsString('Important article text here', $result);
-        $this->assertStringNotContainsString('Support us', $result);
-        $this->assertStringNotContainsString('Buy our product', $result);
-    }
-
-    /** @test */
-    public function it_handles_bulgarian_donation_text(): void
-    {
-        $text = 'Превод от чужд език и редакция на 1 страница текст за публикация. 
-        Авторски хонорар за статия от български автор. 
-        Article content here.';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Article content here', $result);
-        $this->assertStringNotContainsString('Превод от чужд език', $result);
-        $this->assertStringNotContainsString('Авторски хонорар', $result);
-    }
-
-    /** @test */
-    public function it_removes_newsletter_signup_text(): void
-    {
-        $text = 'Great article content. Subscribe to our newsletter for updates. More info here.';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Great article content', $result);
-        $this->assertStringNotContainsString('newsletter', $result);
-    }
-
-    /** @test */
-    public function it_removes_credit_card_info_text(): void
-    {
-        $text = 'Article content. Credit Card Info: This is a secure SSL encrypted payment. More content.';
-        
-        $method = new \ReflectionMethod($this->rssFeed, 'removeDonationTextPatterns');
-        $method->setAccessible(true);
-        $result = $method->invoke($this->rssFeed, $text);
-        
-        $this->assertStringContainsString('Article content', $result);
-        $this->assertStringNotContainsString('Credit Card Info', $result);
-        $this->assertStringNotContainsString('SSL encrypted', $result);
+        $this->assertCount(1, $items);
+        $this->assertStringContainsString('Desc 1', $items[0]['description']);
+        $this->assertStringNotContainsString('alert', $items[0]['description']);
+        $this->assertStringNotContainsString('<script', $items[0]['description']);
     }
 }

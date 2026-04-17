@@ -4,10 +4,14 @@ namespace Kalimeromk\Rssfeed;
 
 use Illuminate\Support\ServiceProvider;
 use Kalimeromk\Rssfeed\Services\CacheService;
+use Kalimeromk\Rssfeed\Services\ContentFetcherService;
+use Kalimeromk\Rssfeed\Services\CssSelectorConverter;
 use Kalimeromk\Rssfeed\Services\FeedOutputService;
+use Kalimeromk\Rssfeed\Services\HtmlCleanerService;
 use Kalimeromk\Rssfeed\Services\HtmlSanitizerService;
 use Kalimeromk\Rssfeed\Services\LanguageDetectionService;
 use Kalimeromk\Rssfeed\Services\SecurityValidator;
+use Kalimeromk\Rssfeed\Services\UrlResolver;
 use Kalimeromk\Rssfeed\Extractors\ContentExtractor\ContentExtractor;
 use Kalimeromk\Rssfeed\Handlers\MultiPageHandler;
 use Kalimeromk\Rssfeed\Handlers\SinglePageHandler;
@@ -76,6 +80,26 @@ class RssfeedServiceProvider extends ServiceProvider
             return new FeedOutputService();
         });
 
+        // Content Fetcher Service
+        $this->app->singleton(ContentFetcherService::class, function () {
+            return new ContentFetcherService();
+        });
+
+        // HTML Cleaner Service
+        $this->app->singleton(HtmlCleanerService::class, function () {
+            return new HtmlCleanerService();
+        });
+
+        // CSS Selector Converter
+        $this->app->singleton(CssSelectorConverter::class, function () {
+            return new CssSelectorConverter();
+        });
+
+        // URL Resolver
+        $this->app->singleton(UrlResolver::class, function () {
+            return new UrlResolver();
+        });
+
         // Content Extractor
         $this->app->bind(ContentExtractor::class, function ($app) {
             return new ContentExtractor(
@@ -85,8 +109,8 @@ class RssfeedServiceProvider extends ServiceProvider
         });
 
         // Handlers
-        $this->app->singleton(MultiPageHandler::class, function () {
-            return new MultiPageHandler();
+        $this->app->singleton(MultiPageHandler::class, function ($app) {
+            return new MultiPageHandler($app->make(UrlResolver::class));
         });
 
         $this->app->singleton(SinglePageHandler::class, function () {

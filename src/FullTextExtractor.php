@@ -10,6 +10,7 @@ use Kalimeromk\Rssfeed\Handlers\MultiPageHandler;
 use Kalimeromk\Rssfeed\Handlers\SinglePageHandler;
 use Kalimeromk\Rssfeed\Services\HtmlSanitizerService;
 use Kalimeromk\Rssfeed\Services\LanguageDetectionService;
+use Kalimeromk\Rssfeed\Services\UrlResolver;
 
 /**
  * Full-Text Content Extractor
@@ -141,6 +142,11 @@ class FullTextExtractor
             $language = $contentExtractor->getLanguage();
             $isNativeAd = $contentExtractor->isNativeAd();
 
+            // Convert DOMElement to HTML string early
+            if ($content instanceof \DOMElement) {
+                $content = (string) $content->ownerDocument->saveHTML($content);
+            }
+
             // Detect language if not found
             if (empty($language) && config('rssfeed.detect_language', true)) {
                 $languageDetector = $this->app->make(LanguageDetectionService::class);
@@ -200,11 +206,13 @@ class FullTextExtractor
      */
     private function convertToUtf8(string $html): string
     {
-        // Check for charset in meta tag
         if (preg_match('/<meta[^>]+charset=[\'"]?([a-z0-9_-]+)[\'"]?/i', $html, $matches)) {
             $charset = strtoupper($matches[1]);
             if ($charset !== 'UTF-8') {
-                $html = mb_convert_encoding($html, 'HTML-ENTITIES', $charset);
+                $converted = iconv($charset, 'UTF-8//IGNORE', $html);
+                if ($converted !== false) {
+                    $html = str_ireplace($matches[0], str_ireplace($matches[1], 'UTF-8', $matches[0]), $converted);
+                }
             }
         }
 
@@ -220,9 +228,11 @@ class FullTextExtractor
             return $html;
         }
 
+        $resolver = $this->app->make(UrlResolver::class);
+
         libxml_use_internal_errors(true);
         $dom = new \DOMDocument();
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+        $dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         libxml_clear_errors();
 
         $xpath = new \DOMXPath($dom);
@@ -232,7 +242,7 @@ class FullTextExtractor
         foreach ($images as $img) {
             if ($img instanceof \DOMElement) {
                 $src = $img->getAttribute('src');
-                $absUrl = $this->makeAbsolute($baseUrl, $src);
+                $absUrl = $resolver->makeAbsolute($baseUrl, $src);
                 if ($absUrl) {
                     $img->setAttribute('src', $absUrl);
                 }
@@ -244,7 +254,7 @@ class FullTextExtractor
         foreach ($links as $link) {
             if ($link instanceof \DOMElement) {
                 $href = $link->getAttribute('href');
-                $absUrl = $this->makeAbsolute($baseUrl, $href);
+                $absUrl = $resolver->makeAbsolute($baseUrl, $href);
                 if ($absUrl) {
                     $link->setAttribute('href', $absUrl);
                 }
@@ -262,45 +272,5 @@ class FullTextExtractor
         }
 
         return $html;
-    }
-
-    /**
-     * Make URL absolute
-     */
-    private function makeAbsolute(string $base, string $url): ?string
-    {
-        // Already absolute
-        if (preg_match('#^https?://#i', $url)) {
-            return $url;
-        }
-
-        // Protocol-relative
-        if (str_starts_with($url, '//')) {
-            $scheme = parse_url($base, PHP_URL_SCHEME) ?: 'https';
-            return $scheme . ':' . $url;
-        }
-
-        // Data URI
-        if (str_starts_with($url, 'data:')) {
-            return null;
-        }
-
-        $baseParts = parse_url($base);
-        if (empty($baseParts['scheme']) || empty($baseParts['host'])) {
-            return null;
-        }
-
-        $scheme = $baseParts['scheme'];
-        $host = $baseParts['host'];
-        $basePath = $baseParts['path'] ?? '/';
-        $baseDir = rtrim(str_replace('\\', '/', dirname($basePath)), '/');
-
-        // Absolute path
-        if (str_starts_with($url, '/')) {
-            return $scheme . '://' . $host . $url;
-        }
-
-        // Relative path
-        return $scheme . '://' . $host . $baseDir . '/' . $url;
     }
 }

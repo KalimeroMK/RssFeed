@@ -1,9 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Kalimeromk\Rssfeed;
 
 use DOMDocument;
-use DOMXPath;
 use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Facades\Http;
@@ -11,11 +12,13 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
+use Kalimeromk\Rssfeed\Services\ContentFetcherService;
+use Kalimeromk\Rssfeed\Services\HtmlCleanerService;
+use Kalimeromk\Rssfeed\Services\UrlResolver;
 use SimplePie\SimplePie;
 
 class RssFeed
 {
-
     private Container $app;
 
     public function __construct(Container $app)
@@ -26,10 +29,6 @@ class RssFeed
     /**
      * Parses the RSS feeds from a given URL.
      *
-     * This method creates an instance of SimplePie, disables caching and ordering by date,
-     * sets some default cURL options for SSL verification, and optionally sets additional cURL options.
-     * It then sets the feed URL, initializes the SimplePie object, and returns it.
-     *
      * @param  string  $url  The URL of the RSS feed to parse.
      * @param  mixed  $jobId  An optional job ID. Default is null.
      * @return SimplePie The initialized SimplePie object.
@@ -37,23 +36,22 @@ class RssFeed
      * @throws Exception If the SimplePie object cannot be created or initialized.
      * @throws CantOpenFileFromUrlException
      */
-    public function RssFeeds(string $url, $jobId = null): SimplePie
+    public function rssFeeds(string $url, $jobId = null): SimplePie
     {
         if (! $this->urlExists($url)) {
             throw new CantOpenFileFromUrlException("Cannot open RSS feed URL: {$url}");
         }
+
         $simplePie = $this->app->make(SimplePie::class);
 
         $simplePie->enable_cache(false);
         $simplePie->enable_order_by_date(false);
 
-        // Set default cURL options
+        $verifySsl = (bool) config('rssfeed.http_verify_ssl', true);
         $simplePie->set_curl_options([
-            CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
+            CURLOPT_SSL_VERIFYPEER => $verifySsl,
         ]);
-
-        // Additional cURL options can be configured via SimplePie if needed
 
         $simplePie->set_feed_url($url);
         $simplePie->init();
@@ -64,14 +62,8 @@ class RssFeed
     /**
      * Saves images to storage.
      *
-     * This method takes an array of image URLs, downloads them, and saves them to storage.
-     * It generates a random name for each image and stores the image in the path specified by the 'rssfeed.image_storage_path' configuration value.
-     * If this configuration value is not set, it defaults to 'images'.
-     * The images are stored with 'public' visibility.
-     * The method returns an array of the generated image names.
-     *
      * @param  array  $images  An array of image URLs to download and save.
-     * @return array An array of the generated image names.
+     * @return array<string> An array of the generated image names.
      */
     public function saveImagesToStorage(array $images, ?object $model = null): array
     {
@@ -97,7 +89,7 @@ class RssFeed
                 $imageName = Str::random(15).'.'.$extension;
 
                 if ($spatieEnabled && $model && \method_exists($model, 'addMediaFromUrl')) {
-                    $media = $model->addMediaFromUrl($image)
+                    $model->addMediaFromUrl($image)
                         ->toMediaCollection($spatieMediaType, $spatieDisk);
                 } else {
                     $file->storeAs($imageStoragePath, $imageName, $spatieDisk);
@@ -115,44 +107,27 @@ class RssFeed
 
     /**
      * Infers the file extension from the URL or MIME type.
-     *
-     * This method first attempts to infer the file extension from the URL.
-     * If the URL does not contain an extension, it falls back to mapping MIME types to extensions.
-     * If the MIME type is unknown, it defaults to 'bin'.
-     *
-     * @param  string  $url  The URL of the file.
-     * @param  string  $mimeType  The MIME type of the file.
-     * @return string The inferred file extension.
      */
     private function inferExtension(string $url, ?string $mimeType): string
     {
-        // Attempt to infer the extension from the URL
         $path = parse_url($url, PHP_URL_PATH) ?: '';
         $pathInfo = pathinfo($path);
         if (isset($pathInfo['extension'])) {
             return $pathInfo['extension'];
         }
 
-        // Fallback to mapping MIME types to extensions
         $mimeTypeMapping = [
             'image/jpeg' => 'jpg',
             'image/png' => 'png',
             'image/gif' => 'gif',
             'image/webp' => 'webp',
-            // Add more MIME type mappings as needed
         ];
 
-        return $mimeType !== null ? ($mimeTypeMapping[$mimeType] ?? 'bin') : 'bin'; // Default to 'bin' if MIME type is unknown
+        return $mimeType !== null ? ($mimeTypeMapping[$mimeType] ?? 'bin') : 'bin';
     }
 
     /**
      * Extracts the image source URL from the provided HTML description.
-     *
-     * This method uses a regular expression to match an <img> tag and its source URL in the provided HTML description.
-     * If an <img> tag is found, the source URL is returned. If no <img> tag is found, the method returns null.
-     *
-     * @param  string  $content  The HTML description from which to extract the image source URL.
-     * @return string|null The extracted image source URL, or null if no <img> tag is found.
      */
     public function extractImageFromDescription(string $content, ?string $baseUrl = null): ?string
     {
@@ -168,11 +143,14 @@ class RssFeed
 
     /**
      * Extracts image URLs from a SimplePie item (enclosures, Media RSS, and HTML).
+     *
+     * @return array<int, string>
      */
     public function extractImagesFromItem(object $item): array
     {
         $images = [];
         $baseUrl = method_exists($item, 'get_link') ? (string) $item->get_link() : null;
+        $resolver = $this->app->make(UrlResolver::class);
 
         if (method_exists($item, 'get_enclosures')) {
             $enclosures = $item->get_enclosures() ?? [];
@@ -190,7 +168,7 @@ class RssFeed
                 } elseif (method_exists($enclosure, 'get_url')) {
                     $url = $enclosure->get_url();
                 }
-                $this->addImageUrl($images, $this->resolveUrl((string) $url, $baseUrl), $type);
+                $this->addImageUrl($images, $resolver->resolveUrl((string) $url, $baseUrl), $type);
             }
         }
 
@@ -204,6 +182,9 @@ class RssFeed
         return array_values(array_unique(array_filter($images)));
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function extractImagesFromMediaRss(object $item, ?string $baseUrl): array
     {
         $images = [];
@@ -211,6 +192,7 @@ class RssFeed
             return $images;
         }
 
+        $resolver = $this->app->make(UrlResolver::class);
         $namespace = 'http://search.yahoo.com/mrss/';
         foreach (['content', 'thumbnail'] as $tag) {
             $tags = $item->get_item_tags($namespace, $tag) ?? [];
@@ -218,13 +200,16 @@ class RssFeed
                 $attribs = $tagData['attribs'][''] ?? [];
                 $url = $attribs['url'] ?? null;
                 $type = $attribs['type'] ?? null;
-                $this->addImageUrl($images, $this->resolveUrl((string) $url, $baseUrl), $type);
+                $this->addImageUrl($images, $resolver->resolveUrl((string) $url, $baseUrl), $type);
             }
         }
 
         return $images;
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function extractImagesFromTagString(string $content): array
     {
         $images = [];
@@ -242,6 +227,9 @@ class RssFeed
         return array_values(array_unique(array_filter($images)));
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function parseTagAttributes(string $tag): array
     {
         $attrs = [];
@@ -254,6 +242,9 @@ class RssFeed
         return $attrs;
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function extractImagesFromHtml(string $html, ?string $baseUrl): array
     {
         $images = [];
@@ -263,9 +254,10 @@ class RssFeed
 
         libxml_use_internal_errors(true);
         $dom = new DOMDocument;
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+        $dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         libxml_clear_errors();
 
+        $resolver = $this->app->make(UrlResolver::class);
         $tags = $dom->getElementsByTagName('img');
         foreach ($tags as $tag) {
             if (! $tag instanceof \DOMElement) {
@@ -278,7 +270,7 @@ class RssFeed
             $dataSrcset = $tag->getAttribute('data-srcset');
 
             $candidate = $this->parseSrcset($srcset ?: $dataSrcset) ?: ($src ?: $dataSrc ?: $dataOriginal);
-            $this->addImageUrl($images, $this->resolveUrl($candidate, $baseUrl), 'image/unknown');
+            $this->addImageUrl($images, $resolver->resolveUrl($candidate, $baseUrl), 'image/unknown');
         }
 
         return array_values(array_unique(array_filter($images)));
@@ -301,9 +293,9 @@ class RssFeed
             $url = $parts[0] ?? null;
             $descriptor = $parts[1] ?? '';
             $score = 1;
-            if ($this->endsWith($descriptor, 'w')) {
+            if (str_ends_with($descriptor, 'w')) {
                 $score = (int) rtrim($descriptor, 'w');
-            } elseif ($this->endsWith($descriptor, 'x')) {
+            } elseif (str_ends_with($descriptor, 'x')) {
                 $score = (int) (float) rtrim($descriptor, 'x');
             }
             if ($url && $score >= $bestScore) {
@@ -313,40 +305,6 @@ class RssFeed
         }
 
         return $bestUrl;
-    }
-
-    private function resolveUrl(?string $url, ?string $baseUrl): ?string
-    {
-        if (! $url) {
-            return null;
-        }
-        if ($this->startsWith($url, 'data:')) {
-            return null;
-        }
-        if (preg_match('#^https?://#i', $url)) {
-            return $url;
-        }
-        if ($this->startsWith($url, '//')) {
-            $scheme = parse_url((string) $baseUrl, PHP_URL_SCHEME) ?: 'https';
-            return $scheme.':'.$url;
-        }
-        if (! $baseUrl) {
-            return $url;
-        }
-        $baseParts = parse_url($baseUrl);
-        if (empty($baseParts['scheme']) || empty($baseParts['host'])) {
-            return $url;
-        }
-        $scheme = $baseParts['scheme'];
-        $host = $baseParts['host'];
-        $basePath = $baseParts['path'] ?? '/';
-        $baseDir = rtrim(str_replace('\\', '/', dirname($basePath)), '/');
-
-        if ($this->startsWith($url, '/')) {
-            return $scheme.'://'.$host.$url;
-        }
-
-        return $scheme.'://'.$host.$baseDir.'/'.$url;
     }
 
     private function isAllowedImageExtension(string $extension): bool
@@ -366,21 +324,7 @@ class RssFeed
 
     private function isLikelyImageType(string $type): bool
     {
-        return $this->startsWith(strtolower($type), 'image/');
-    }
-
-    private function startsWith(string $haystack, string $needle): bool
-    {
-        return $needle === '' || strncmp($haystack, $needle, strlen($needle)) === 0;
-    }
-
-    private function endsWith(string $haystack, string $needle): bool
-    {
-        if ($needle === '') {
-            return true;
-        }
-
-        return substr($haystack, -strlen($needle)) === $needle;
+        return str_starts_with(strtolower($type), 'image/');
     }
 
     private function addImageUrl(array &$images, ?string $url, ?string $type): void
@@ -399,17 +343,6 @@ class RssFeed
 
     /**
      * Checks if a given URL exists.
-     *
-     * This method sends a GET request to the provided URL with specific headers and options.
-     * The 'verify' option is set to false to skip SSL verification, and the 'timeout' option is set to 60 seconds.
-     * The headers include a specific 'User-Agent' and 'Accept' values.
-     * If the GET request is successful, the method returns true.
-     * If the GET request fails (throws an exception), the method returns false.
-     *
-     * @param  string  $url  The URL to check.
-     * @return bool Returns true if the URL exists (the GET request is successful), false otherwise.
-     *
-     * @throws Exception If the GET request fails.
      */
     public function urlExists(string $url): bool
     {
@@ -418,12 +351,12 @@ class RssFeed
                 (int) config('rssfeed.http_retry_times', 2),
                 (int) config('rssfeed.http_retry_sleep_ms', 200)
             )->timeout((int) config('rssfeed.http_timeout', 15))
-            ->withOptions([
-                'verify' => (bool) config('rssfeed.http_verify_ssl', true),
-            ])->withHeaders([
-                'User-Agent' => 'Full-Text RSS',
-                'Accept' => 'application/rss+xml, application/xml, text/xml',
-            ])->get($url);
+                ->withOptions([
+                    'verify' => (bool) config('rssfeed.http_verify_ssl', true),
+                ])->withHeaders([
+                    'User-Agent' => 'Full-Text RSS',
+                    'Accept' => 'application/rss+xml, application/xml, text/xml',
+                ])->get($url);
 
             return $response->successful();
         } catch (Exception $e) {
@@ -431,9 +364,12 @@ class RssFeed
         }
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function parseRssFeeds(string $url): array
     {
-        $feed = new SimplePie;
+        $feed = $this->app->make(SimplePie::class);
         $feed->set_feed_url($url);
         $feed->enable_cache(false);
         $feed->init();
@@ -484,251 +420,36 @@ class RssFeed
 
     /**
      * Parse RSS feeds and extract clean text content.
-     * This method is similar to parseRssFeeds but returns clean text
-     * without HTML, ads, donation forms, etc.
+     *
+     * @return array<int, array<string, mixed>>
      */
     public function parseRssFeedsClean(string $url): array
     {
         $items = $this->parseRssFeeds($url);
-        
+        $cleaner = $this->app->make(HtmlCleanerService::class);
+
         foreach ($items as &$item) {
-            // Extract clean text from HTML content
             if (! empty($item['content'])) {
-                $item['content'] = $this->extractTextContent($item['content']);
+                $item['content'] = $cleaner->extractTextContent($item['content']);
             }
-            // Also clean up description
             if (! empty($item['description'])) {
-                $item['description'] = $this->extractTextContent($item['description']);
+                $item['description'] = $cleaner->extractTextContent($item['description']);
             }
         }
-        
+
         return $items;
     }
 
-    /**
-     * Fetches the full content from a post URL using a domain-specific XPath selector.
-     * Removes unwanted elements (donations, ads, etc.) and extracts clean text.
-     */
     public function fetchFullContentFromPost(string $postUrl): string
     {
-        try {
-            $response = Http::retry(
-                (int) config('rssfeed.http_retry_times', 2),
-                (int) config('rssfeed.http_retry_sleep_ms', 200)
-            )->timeout((int) config('rssfeed.http_timeout', 15))
-            ->withOptions([
-                'verify' => (bool) config('rssfeed.http_verify_ssl', true),
-            ])->get($postUrl);
-
-            if ($response->failed()) {
-                return '';
-            }
-
-            $html = $response->body();
-
-            libxml_use_internal_errors(true);
-
-            $dom = new DOMDocument;
-            $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-            libxml_clear_errors();
-
-            $xpath = new DOMXPath($dom);
-
-            // 1. Remove unwanted elements first
-            $this->removeUnwantedElements($dom, $xpath);
-
-            // 2. Extract just the host/domain from the URL
-            $domain = parse_url($postUrl, PHP_URL_HOST);
-
-            // 3. Fetch the selector from config; if not found, use the default
-            $selectors = config('rssfeed.content_selectors', []);
-            $selector = $selectors[$domain] ?? config('rssfeed.default_selector');
-
-            // 4. Use the resolved selector in the XPath query
-            $nodes = $xpath->query($selector);
-
-            if (! $nodes || $nodes->length === 0) {
-                return '';
-            }
-
-            $fullContent = '';
-            foreach ($nodes as $node) {
-                if ($node instanceof \DOMNode) {
-                    $fullContent .= (string) $dom->saveHTML($node);
-                }
-            }
-
-            return $fullContent;
-        } catch (\Exception $e) {
-            return '';
-        }
+        return $this->app->make(ContentFetcherService::class)->fetchFullContentFromPost($postUrl);
     }
 
-    /**
-     * Fetches clean text content from a post URL.
-     * Removes unwanted elements and extracts only the article text.
-     */
     public function fetchCleanTextFromPost(string $postUrl): string
     {
         $html = $this->fetchFullContentFromPost($postUrl);
-        return $this->extractTextContent($html);
-    }
+        $cleaner = $this->app->make(HtmlCleanerService::class);
 
-    /**
-     * Remove unwanted elements from DOM before content extraction.
-     */
-    private function removeUnwantedElements(DOMDocument $dom, DOMXPath $xpath): void
-    {
-        $removeSelectors = config('rssfeed.remove_selectors', []);
-        
-        foreach ($removeSelectors as $selector) {
-            $xpathExpr = $this->cssSelectorToXPath($selector);
-            $nodes = $xpath->query($xpathExpr);
-            
-            if ($nodes) {
-                foreach ($nodes as $node) {
-                    if ($node instanceof \DOMNode && $node->parentNode) {
-                        $node->parentNode->removeChild($node);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Convert simple CSS selector to XPath.
-     * Supports: .class, #id, tag, [attr], [attr=value], tag.class
-     */
-    private function cssSelectorToXPath(string $selector): string
-    {
-        $selector = trim($selector);
-        
-        // Handle attribute contains selector [class*="value"]
-        if (preg_match('/^\[(\w+)\*="([^"]+)"\]$/', $selector, $matches)) {
-            return "//*[contains(@{$matches[1]}, '{$matches[2]}')]";
-        }
-        
-        // Handle attribute selector [attr=value]
-        if (preg_match('/^\[(\w+)="([^"]+)"\]$/', $selector, $matches)) {
-            return "//*[@{$matches[1]}='{$matches[2]}']";
-        }
-        
-        // Handle ID selector #id
-        if (substr($selector, 0, 1) === '#') {
-            $id = substr($selector, 1);
-            return "//*[@id='{$id}']";
-        }
-        
-        // Handle class selector .class
-        if (substr($selector, 0, 1) === '.'){
-            $class = substr($selector, 1);
-            return "//*[contains(@class, '{$class}')]";
-        }
-        
-        // Handle tag.class
-        if (strpos($selector, '.') !== false) {
-            list($tag, $class) = explode('.', $selector, 2);
-            return "//{$tag}[contains(@class, '{$class}')]";
-        }
-        
-        // Handle tag#id
-        if (strpos($selector, '#') !== false) {
-            list($tag, $id) = explode('#', $selector, 2);
-            return "//{$tag}[@id='{$id}']";
-        }
-        
-        // Default: tag name
-        return "//{$selector}";
-    }
-
-    /**
-     * Extract clean text content from HTML.
-     * Removes scripts, styles, and normalizes whitespace.
-     */
-    private function extractTextContent(string $html): string
-    {
-        if (empty($html)) {
-            return '';
-        }
-
-        libxml_use_internal_errors(true);
-        $dom = new DOMDocument;
-        $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
-        libxml_clear_errors();
-
-        // Remove script and style elements
-        $xpath = new DOMXPath($dom);
-        $scripts = $xpath->query('//script|//style|//noscript|//iframe|//embed|//object');
-        foreach ($scripts as $script) {
-            if ($script->parentNode) {
-                $script->parentNode->removeChild($script);
-            }
-        }
-
-        // Get text content
-        $text = $dom->textContent;
-        
-        // Normalize whitespace
-        $text = preg_replace('/\s+/', ' ', $text);
-        $text = trim($text);
-        
-        // Remove common donation/payment text patterns
-        $text = $this->removeDonationTextPatterns($text);
-        
-        return $text;
-    }
-
-    /**
-     * Remove common donation and payment text patterns.
-     */
-    private function removeDonationTextPatterns(string $text): string
-    {
-        $patterns = [
-            // Bulgarian donation patterns (from your example)
-            '/дарител/is',
-            '/Donation Amount/is',
-            '/Превод от чужд език/is',
-            '/Авторски хонорар/is',
-            '/Такса за поддръжка/is',
-            '/Избрана от Вас сума/is',
-            '/Дарете сега/is',
-            '/Donation Total/is',
-            '/Споделете/is',
-            
-            // English donation patterns
-            '/donate now/i',
-            '/make a donation/i',
-            '/support us/i',
-            '/become a patron/i',
-            '/donation amount/i',
-            '/credit card info/i',
-            '/secure ssl encrypted payment/i',
-            '/select payment method/i',
-            '/personal info/i',
-            '/first name/i',
-            '/last name/i',
-            '/email address/i',
-            '/make this an anonymous donation/i',
-            '/donation total/i',
-            
-            // Newsletter patterns
-            '/subscribe to our newsletter/i',
-            '/sign up for our newsletter/i',
-            '/newsletter signup/i',
-            '/email newsletter/i',
-            
-            // Generic patterns
-            '/\d+\.\d{2}€/',
-            '/\$\d+\.\d{2}/',
-        ];
-        
-        foreach ($patterns as $pattern) {
-            $text = preg_replace($pattern, '', $text);
-        }
-        
-        // Clean up extra whitespace
-        $text = preg_replace('/\s+/', ' ', $text);
-        
-        return trim($text);
+        return $cleaner->extractTextContent($html);
     }
 }

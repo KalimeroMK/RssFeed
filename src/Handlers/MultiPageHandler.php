@@ -7,13 +7,17 @@ namespace Kalimeromk\Rssfeed\Handlers;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Kalimeromk\Rssfeed\Extractors\ContentExtractor\ContentExtractor;
+use Kalimeromk\Rssfeed\Services\UrlResolver;
 
-/**
- * Handles multi-page articles
- * Fetches and concatenates content from multiple pages
- */
 class MultiPageHandler
 {
+    private UrlResolver $urlResolver;
+
+    public function __construct(UrlResolver $urlResolver)
+    {
+        $this->urlResolver = $urlResolver;
+    }
+
     /**
      * Process multi-page article
      *
@@ -24,7 +28,6 @@ class MultiPageHandler
     {
         Log::debug('Processing multi-page article', ['base_url' => $baseUrl]);
 
-        /** @var mixed $initialContent */
         $initialContent = $extraction['content'];
         $content = is_string($initialContent) ? $initialContent : '';
         $processedUrls = [$baseUrl];
@@ -32,7 +35,7 @@ class MultiPageHandler
         while (! empty($extraction['next_page_url'])) {
             /** @var string $nextPageUrl */
             $nextPageUrl = $extraction['next_page_url'];
-            $nextUrl = $this->makeAbsolute($baseUrl, $nextPageUrl);
+            $nextUrl = $this->urlResolver->makeAbsolute($baseUrl, $nextPageUrl);
 
             if (! $nextUrl || in_array($nextUrl, $processedUrls, true)) {
                 Log::debug('Stopping multi-page: URL already processed or invalid', ['url' => $nextUrl]);
@@ -48,7 +51,6 @@ class MultiPageHandler
                 break;
             }
 
-            /** @var mixed $pageContent */
             $pageContent = $pageResult['content'];
             $content .= is_string($pageContent) ? $pageContent : '';
             $extraction['next_page_url'] = $pageResult['next_page_url'] ?? null;
@@ -113,40 +115,13 @@ class MultiPageHandler
         if (preg_match('/<meta[^>]+charset=[\'"]?([a-z0-9_-]+)[\'"]?/i', $html, $matches)) {
             $charset = strtoupper($matches[1]);
             if ($charset !== 'UTF-8') {
-                $html = mb_convert_encoding($html, 'HTML-ENTITIES', $charset);
+                $converted = iconv($charset, 'UTF-8//IGNORE', $html);
+                if ($converted !== false) {
+                    $html = $converted;
+                }
             }
         }
 
         return $html;
-    }
-
-    /**
-     * Make URL absolute
-     */
-    private function makeAbsolute(string $base, string $url): ?string
-    {
-        if (preg_match('#^https?://#i', $url)) {
-            return $url;
-        }
-
-        $baseParts = parse_url($base);
-        if (empty($baseParts['scheme']) || empty($baseParts['host'])) {
-            return null;
-        }
-
-        $scheme = $baseParts['scheme'];
-        $host = $baseParts['host'];
-        $basePath = $baseParts['path'] ?? '/';
-        $baseDir = rtrim(str_replace('\\', '/', dirname($basePath)), '/');
-
-        if (str_starts_with($url, '/')) {
-            return $scheme.'://'.$host.$url;
-        }
-
-        if (str_starts_with($url, '//')) {
-            return $scheme.':'.$url;
-        }
-
-        return $scheme.'://'.$host.$baseDir.'/'.$url;
     }
 }

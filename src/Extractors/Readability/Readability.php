@@ -95,7 +95,6 @@ class Readability
 
         if ($parser === 'gumbo') {
             $html = str_replace('&apos;', "'", $html);
-            $html = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
             $this->dom = @\Layershifter\Gumbo\Parser::load($html);
         } elseif ($parser === 'html5lib' || $parser === 'html5php') {
             $html5 = new HTML5(['disable_html_ns' => true]);
@@ -105,8 +104,7 @@ class Readability
         if ($this->dom === null) {
             $this->dom = new DOMDocument();
             $this->dom->preserveWhiteSpace = false;
-            $html = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
-            @$this->dom->loadHTML($html);
+            @$this->dom->loadHTML('<?xml encoding="UTF-8"?>'.$html);
         }
 
         $this->dom->registerNodeClass('DOMElement', JSLikeHTMLElement::class);
@@ -768,18 +766,18 @@ class Readability
     protected function initializeNode(DOMElement $node): void
     {
         $readability = $this->dom->createAttribute('readability');
-        $readability->value = 0;
+        $readability->value = '0';
         $node->setAttributeNode($readability);
 
         switch (mb_strtoupper($node->tagName)) {
             case 'DIV':
-                $readability->value += 5;
+                $this->addReadabilityScore($readability, 5);
                 break;
 
             case 'PRE':
             case 'TD':
             case 'BLOCKQUOTE':
-                $readability->value += 3;
+                $this->addReadabilityScore($readability, 3);
                 break;
 
             case 'ADDRESS':
@@ -790,7 +788,7 @@ class Readability
             case 'DT':
             case 'LI':
             case 'FORM':
-                $readability->value -= 3;
+                $this->addReadabilityScore($readability, -3);
                 break;
 
             case 'H1':
@@ -800,10 +798,26 @@ class Readability
             case 'H5':
             case 'H6':
             case 'TH':
-                $readability->value -= 5;
+                $this->addReadabilityScore($readability, -5);
                 break;
         }
-        $readability->value += $this->getClassWeight($node);
+        $this->addReadabilityScore($readability, $this->getClassWeight($node));
+    }
+
+    /**
+     * Add to readability score on a DOMAttr safely for PHP 8.4+ compatibility.
+     */
+    protected function addReadabilityScore(DOMAttr $attr, float $delta): void
+    {
+        $attr->value = (string) ((float) $attr->value + $delta);
+    }
+
+    /**
+     * Multiply readability score on a DOMAttr safely for PHP 8.4+ compatibility.
+     */
+    protected function multiplyReadabilityScore(DOMAttr $attr, float $factor): void
+    {
+        $attr->value = (string) ((float) $attr->value * $factor);
     }
 
     /**
@@ -903,17 +917,17 @@ class Readability
 
             $contentScore += min(floor(mb_strlen($innerText) / 100), 3);
 
-            $parentNode->getAttributeNode('readability')->value += $contentScore;
+            $this->addReadabilityScore($parentNode->getAttributeNode('readability'), $contentScore);
 
             if ($grandParentNode) {
-                $grandParentNode->getAttributeNode('readability')->value += $contentScore / 2;
+                $this->addReadabilityScore($grandParentNode->getAttributeNode('readability'), $contentScore / 2);
             }
         }
 
         $topCandidate = null;
         for ($c = 0, $cl = count($candidates); $c < $cl; $c++) {
             $readability = $candidates[$c]->getAttributeNode('readability');
-            $readability->value = $readability->value * (1 - $this->getLinkDensity($candidates[$c]));
+            $this->multiplyReadabilityScore($readability, 1 - $this->getLinkDensity($candidates[$c]));
 
             $this->dbg('Candidate: '.$candidates[$c]->tagName.' ('.$candidates[$c]->getAttribute('class').':'.$candidates[$c]->getAttribute('id').') with score '.$readability->value);
 

@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace Kalimeromk\Rssfeed\Extractors\ContentExtractor;
 
+use Illuminate\Support\Facades\Cache;
+
 class SiteConfig
 {
     public const HOSTNAME_REGEX = '/^(([a-zA-Z0-9-]*[a-zA-Z0-9])\.)*([A-Za-z0-9-]*[A-Za-z0-9])$/';
@@ -78,8 +80,6 @@ class SiteConfig
 
     protected bool $default_insert_detected_image = true;
 
-    protected static bool $apc = false;
-
     protected static ?string $config_path_custom = null;
 
     protected static ?string $config_path_fallback = null;
@@ -89,16 +89,8 @@ class SiteConfig
 
     public static function use_apc(bool $apc = true): bool
     {
-        if (! function_exists('apc_add')) {
-            if ($apc) {
-                self::debug('APC will not be used (function apc_add does not exist)');
-            }
-
-            return false;
-        }
-        self::$apc = $apc;
-
-        return $apc;
+        // APC caching is deprecated; Laravel Cache is used automatically.
+        return false;
     }
 
     public static function set_config_path(string $path, ?string $fallback = null): void
@@ -114,10 +106,8 @@ class SiteConfig
             $key = mb_substr($key, 4);
         }
         self::$config_cache[$key] = $config;
-        if (self::$apc && $use_apc) {
-            self::debug("Adding site config to APC cache with key sc.$key");
-            apc_add("sc.$key", $config);
-        }
+        $cacheKey = 'rssfeed_siteconfig_' . $key;
+        Cache::put($cacheKey, $config, 86400);
         self::debug("Cached site config with key $key");
     }
 
@@ -132,8 +122,11 @@ class SiteConfig
 
             return self::$config_cache[$key];
         }
-        if (self::$apc && ($sconfig = apc_fetch("sc.$key"))) {
-            self::debug("... site config for $key found in APCu");
+        $cacheKey = 'rssfeed_siteconfig_' . $key;
+        $sconfig = Cache::get($cacheKey);
+        if ($sconfig instanceof self) {
+            self::debug("... site config for $key found in Laravel cache");
+            self::$config_cache[$key] = $sconfig;
 
             return $sconfig;
         }
@@ -150,11 +143,9 @@ class SiteConfig
         if (array_key_exists($key, self::$config_cache)) {
             return true;
         }
-        if (self::$apc && (bool) apc_fetch("sc.$key")) {
-            return true;
-        }
+        $cacheKey = 'rssfeed_siteconfig_' . $key;
 
-        return false;
+        return Cache::has($cacheKey);
     }
 
     public static function build(string $host, bool $exact_host_match = false): self|false
