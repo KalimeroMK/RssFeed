@@ -62,6 +62,10 @@ class SecurityValidator
         $host = strtolower($host);
         $host = preg_replace('/^www\./', '', $host);
 
+        if (! is_string($host)) {
+            return false;
+        }
+
         // Check blocked hosts first
         foreach ($blockedHosts as $blocked) {
             if (str_contains($host, strtolower($blocked))) {

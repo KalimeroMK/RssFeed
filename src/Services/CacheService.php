@@ -107,6 +107,6 @@ class CacheService
             return $callback();
         }
 
-        return Cache::remember($this->prefix.$key, $ttl ?? $this->ttl, $callback);
+        return Cache::remember($this->prefix.$key, $ttl ?? $this->ttl, \Closure::fromCallable($callback));
     }
 }

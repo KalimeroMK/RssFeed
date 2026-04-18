@@ -150,6 +150,9 @@ class ContentExtractor
     public function buildSiteConfig(string $url, string $html = ''): SiteConfig
     {
         $host = @parse_url($url, PHP_URL_HOST);
+        if (! is_string($host)) {
+            $host = '';
+        }
         $host = mb_strtolower($host);
         if (mb_substr($host, 0, 4) === 'www.') {
             $host = mb_substr($host, 4);
@@ -186,18 +189,25 @@ class ContentExtractor
         $this->reset();
         if (isset($this->userSubmittedConfig)) {
             $this->debug('Using user-submitted site config');
-            $this->config = $this->userSubmittedConfig;
-            if ($this->config->autodetect_on_failure()) {
-                $this->debug('Merging user-submitted site config with site config files associated with this URL and/or content');
-                $this->config->append($this->buildSiteConfig($url, $html));
-            }
+            $config = $this->userSubmittedConfig;
         } else {
-            $this->config = $this->buildSiteConfig($url, $html);
+            $config = $this->buildSiteConfig($url, $html);
         }
 
-        if (! empty($this->config->find_string)) {
-            if (count($this->config->find_string) === count($this->config->replace_string)) {
-                $html = str_replace($this->config->find_string, $this->config->replace_string, $html, $_count);
+        if ($config === null) {
+            return false;
+        }
+
+        $this->config = $config;
+
+        if ($this->userSubmittedConfig !== null && $config->autodetect_on_failure()) {
+            $this->debug('Merging user-submitted site config with site config files associated with this URL and/or content');
+            $config->append($this->buildSiteConfig($url, $html));
+        }
+
+        if (! empty($config->find_string)) {
+            if (count($config->find_string) === count($config->replace_string)) {
+                $html = str_replace($config->find_string, $config->replace_string, $html, $_count);
                 $this->debug("Strings replaced: $_count (find_string and/or replace_string)");
             } else {
                 $this->debug('Skipped string replacement - incorrect number of find-replace strings in site config');
@@ -208,8 +218,8 @@ class ContentExtractor
         $_parser = $this->defaultParser;
         if ($this->allowParserOverride && $this->parserOverride) {
             $_parser = $this->parserOverride;
-        } elseif ($this->allowParserOverride && ($this->config->parser($use_default = false) !== null)) {
-            $_parser = $this->config->parser($use_default = false);
+        } elseif ($this->allowParserOverride && ($config->parser($use_default = false) !== null)) {
+            $_parser = $config->parser($use_default = false);
         }
         if ($_parser === 'html5lib') {
             $_parser = 'html5php';
@@ -225,14 +235,14 @@ class ContentExtractor
         $this->selectedParser = $_parser;
 
         $tidied = false;
-        if ($this->config->tidy() && function_exists('tidy_parse_string') && $smart_tidy) {
-            if (($_parser === 'gumbo' || $_parser === 'html5php') && ($this->config->tidy === null)) {
+        $original_html = $html;
+        if ($config->tidy() && function_exists('tidy_parse_string') && $smart_tidy) {
+            if (($_parser === 'gumbo' || $_parser === 'html5php') && ($config->tidy === null)) {
                 // No Tidy
             } else {
                 $this->debug('Using Tidy');
                 $tidy = tidy_parse_string($html, self::$tidy_config, 'UTF8');
-                if (tidy_clean_repair($tidy)) {
-                    $original_html = $html;
+                if ($tidy instanceof \tidy && tidy_clean_repair($tidy)) {
                     $tidied = true;
                     $html = $tidy->value;
                 }
@@ -241,12 +251,20 @@ class ContentExtractor
         }
 
         $this->debug("Attempting to parse HTML with $_parser");
+        if ($html === null) {
+            $html = '';
+        }
         $this->readability = new Readability($html, $url, $_parser);
 
-        $xpath = new DOMXPath($this->readability->dom);
+        $readability = $this->readability;
+        if ($readability->dom === null) {
+            return false;
+        }
 
-        foreach ($this->config->next_page_link as $pattern) {
-            $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+        $xpath = new DOMXPath($readability->dom);
+
+        foreach ($config->next_page_link as $pattern) {
+            $elems = @$xpath->evaluate($pattern, $readability->dom);
             if (is_string($elems)) {
                 $this->nextPageUrl = mb_trim($elems);
                 break;
@@ -265,16 +283,16 @@ class ContentExtractor
             }
         }
 
-        foreach ($this->config->native_ad_clue as $pattern) {
-            $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+        foreach ($config->native_ad_clue as $pattern) {
+            $elems = @$xpath->evaluate($pattern, $readability->dom);
             if ($elems instanceof DOMNodeList && $elems->length > 0) {
                 $this->nativeAd = true;
                 break;
             }
         }
 
-        foreach ($this->config->title as $pattern) {
-            $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+        foreach ($config->title as $pattern) {
+            $elems = @$xpath->evaluate($pattern, $readability->dom);
             if (is_string($elems)) {
                 $this->title = mb_trim($elems);
                 $this->debug('Title expression evaluated as string: '.$this->title);
@@ -282,21 +300,26 @@ class ContentExtractor
                 break;
             }
             if ($elems instanceof DOMNodeList && $elems->length > 0) {
-                $this->title = $elems->item(0)->textContent;
-                $this->debug('Title matched: '.$this->title);
-                $this->debug("...XPath match: $pattern");
-                try {
-                    @$elems->item(0)->parentNode->removeChild($elems->item(0));
-                } catch (DOMException $e) {
-                    // do nothing
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $this->title = $item->textContent;
+                    $this->debug('Title matched: '.$this->title);
+                    $this->debug("...XPath match: $pattern");
+                    try {
+                        if ($item->parentNode !== null) {
+                            @$item->parentNode->removeChild($item);
+                        }
+                    } catch (DOMException $e) {
+                        // do nothing
+                    }
                 }
                 break;
             }
         }
 
         if (empty($this->author)) {
-            foreach ($this->config->author as $pattern) {
-                $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+            foreach ($config->author as $pattern) {
+                $elems = @$xpath->evaluate($pattern, $readability->dom);
                 if (is_string($elems)) {
                     $_author = mb_trim($elems);
                     $_author = $this->cleanAuthor($_author);
@@ -310,6 +333,9 @@ class ContentExtractor
                 }
                 if ($elems instanceof DOMNodeList && $elems->length > 0) {
                     foreach ($elems as $elem) {
+                        if (! $elem instanceof \DOMElement) {
+                            continue;
+                        }
                         if (! isset($elem->parentNode)) {
                             continue;
                         }
@@ -331,7 +357,7 @@ class ContentExtractor
 
         $_lang_xpath = ['//html[@lang]/@lang', '//meta[@name="DC.language"]/@content'];
         foreach ($_lang_xpath as $pattern) {
-            $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+            $elems = @$xpath->evaluate($pattern, $readability->dom);
             if (is_string($elems)) {
                 if (mb_trim($elems) !== '') {
                     $this->language = mb_trim($elems);
@@ -340,6 +366,9 @@ class ContentExtractor
                 }
             } elseif ($elems instanceof DOMNodeList && $elems->length > 0) {
                 foreach ($elems as $elem) {
+                    if (! $elem instanceof \DOMElement) {
+                        continue;
+                    }
                     if (! isset($elem->parentNode)) {
                         continue;
                     }
@@ -353,11 +382,11 @@ class ContentExtractor
         }
 
         $elems = @$xpath->query("//head//meta[@property='og:title' or @property='og:type' or @property='og:url' or @property='og:image' or @property='og:description']",
-            $this->readability->dom);
+            $readability->dom);
         if ($elems && $elems->length > 0) {
             $this->debug('Extracting Open Graph elements');
             foreach ($elems as $elem) {
-                if ($elem->hasAttribute('content')) {
+                if ($elem instanceof \DOMElement && $elem->hasAttribute('content')) {
                     $_prop = mb_strtolower($elem->getAttribute('property'));
                     $_val = $elem->getAttribute('content');
                     if (! isset($this->opengraph[$_prop])) {
@@ -369,11 +398,11 @@ class ContentExtractor
         }
 
         $elems = @$xpath->query("//head//meta[@name='twitter:card' or @name='twitter:site' or @name='twitter:creator' or @name='twitter:description' or @name='twitter:title' or @name='twitter:image']",
-            $this->readability->dom);
+            $readability->dom);
         if ($elems && $elems->length > 0) {
             $this->debug('Extracting Twiter Card elements');
             foreach ($elems as $elem) {
-                if ($elem->hasAttribute('content')) {
+                if ($elem instanceof \DOMElement && $elem->hasAttribute('content')) {
                     $_prop = mb_strtolower($elem->getAttribute('name'));
                     $_val = $elem->getAttribute('content');
                     if (! isset($this->twitterCard[$_prop])) {
@@ -384,14 +413,17 @@ class ContentExtractor
             unset($_prop, $_val);
         }
 
-        foreach ($this->config->date as $pattern) {
-            $elems = @$xpath->evaluate($pattern, $this->readability->dom);
+        foreach ($config->date as $pattern) {
+            $elems = @$xpath->evaluate($pattern, $readability->dom);
             $dateValue = null;
             if (is_string($elems)) {
                 $dateValue = strtotime(mb_trim($elems, "; \t\n\r\0\x0B"));
             } elseif ($elems instanceof DOMNodeList && $elems->length > 0) {
-                $dateStr = $elems->item(0)->textContent;
-                $dateValue = strtotime(mb_trim($dateStr, "; \t\n\r\0\x0B"));
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $dateStr = $item->textContent;
+                    $dateValue = strtotime(mb_trim($dateStr, "; \t\n\r\0\x0B"));
+                }
             }
             if (! $dateValue) {
                 $this->date = null;
@@ -403,92 +435,118 @@ class ContentExtractor
             }
         }
 
-        foreach ($this->config->strip as $pattern) {
-            $elems = @$xpath->query($pattern, $this->readability->dom);
+        foreach ($config->strip as $pattern) {
+            $elems = @$xpath->query($pattern, $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('Stripping '.$elems->length.' elements (strip: '.$pattern.')');
                 for ($i = $elems->length - 1; $i >= 0; $i--) {
-                    if ($elems->item($i)->parentNode) {
-                        if ($elems->item($i) instanceof DOMAttr) {
-                            $elems->item($i)->parentNode->removeAttributeNode($elems->item($i));
-                        } else {
-                            $elems->item($i)->parentNode->removeChild($elems->item($i));
-                        }
+                    $item = $elems->item($i);
+                    if ($item === null) {
+                        continue;
+                    }
+                    if ($item instanceof DOMAttr && $item->parentNode instanceof \DOMElement) {
+                        $item->parentNode->removeAttributeNode($item);
+                    } elseif ($item instanceof \DOMElement && $item->parentNode !== null) {
+                        $item->parentNode->removeChild($item);
                     }
                 }
             }
         }
 
-        foreach ($this->config->strip_id_or_class as $string) {
+        foreach ($config->strip_id_or_class as $string) {
             $string = strtr($string, ["'" => '', '"' => '']);
             $elems = @$xpath->query("//*[contains(@class, '$string') or contains(@id, '$string')]",
-                $this->readability->dom);
+                $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('Stripping '.$elems->length.' elements (strip_id_or_class: '.$string.')');
                 for ($i = $elems->length - 1; $i >= 0; $i--) {
-                    $elems->item($i)->parentNode->removeChild($elems->item($i));
+                    $item = $elems->item($i);
+                    if ($item instanceof \DOMElement && $item->parentNode !== null) {
+                        $item->parentNode->removeChild($item);
+                    }
                 }
             }
         }
 
-        foreach ($this->config->strip_image_src as $string) {
+        foreach ($config->strip_image_src as $string) {
             $string = strtr($string, ["'" => '', '"' => '']);
-            $elems = @$xpath->query("//img[contains(@src, '$string')]", $this->readability->dom);
+            $elems = @$xpath->query("//img[contains(@src, '$string')]", $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('Stripping '.$elems->length.' elements (strip_image_src: '.$string.')');
                 for ($i = $elems->length - 1; $i >= 0; $i--) {
-                    $elems->item($i)->parentNode->removeChild($elems->item($i));
+                    $item = $elems->item($i);
+                    if ($item instanceof \DOMElement && $item->parentNode !== null) {
+                        $item->parentNode->removeChild($item);
+                    }
                 }
             }
         }
 
         $elems = @$xpath->query("//*[contains(concat(' ',normalize-space(@class),' '),' entry-unrelated ') or contains(concat(' ',normalize-space(@class),' '),' instapaper_ignore ')]",
-            $this->readability->dom);
+            $readability->dom);
         if ($elems && $elems->length > 0) {
             $this->debug('Stripping '.$elems->length.' .entry-unrelated,.instapaper_ignore elements');
             for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $elems->item($i)->parentNode->removeChild($elems->item($i));
+                $item = $elems->item($i);
+                if ($item instanceof \DOMElement && $item->parentNode !== null) {
+                    $item->parentNode->removeChild($item);
+                }
             }
         }
 
-        $elems = @$xpath->query("//*[contains(@style,'display:none')]", $this->readability->dom);
+        $elems = @$xpath->query("//*[contains(@style,'display:none')]", $readability->dom);
         if ($elems && $elems->length > 0) {
             $this->debug('Stripping '.$elems->length.' elements with inline display:none style');
             for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $elems->item($i)->parentNode->removeChild($elems->item($i));
+                $item = $elems->item($i);
+                if ($item instanceof \DOMElement && $item->parentNode !== null) {
+                    $item->parentNode->removeChild($item);
+                }
             }
         }
 
-        $elems = $xpath->query("//a[not(./*) and normalize-space(.)='']", $this->readability->dom);
+        $elems = $xpath->query("//a[not(./*) and normalize-space(.)='']", $readability->dom);
         if ($elems && $elems->length > 0) {
             $this->debug('Stripping '.$elems->length.' empty a elements');
             for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $elems->item($i)->parentNode->removeChild($elems->item($i));
+                $item = $elems->item($i);
+                if ($item instanceof \DOMElement && $item->parentNode !== null) {
+                    $item->parentNode->removeChild($item);
+                }
             }
         }
 
-        foreach ($this->config->body as $pattern) {
-            $elems = @$xpath->query($pattern, $this->readability->dom);
+        foreach ($config->body as $pattern) {
+            $elems = @$xpath->query($pattern, $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('Body matched');
                 $this->debug("...XPath match: $pattern");
                 if ($elems->length === 1) {
-                    $this->body = $elems->item(0);
-                    if ($this->config->prune()) {
-                        $this->debug('...pruning content');
-                        $this->readability->prepArticle($this->body);
+                    $item = $elems->item(0);
+                    if ($item instanceof \DOMElement) {
+                        $this->body = $item;
+                        if ($config->prune()) {
+                            $this->debug('...pruning content');
+                            $readability->prepArticle($item);
+                        }
                     }
                     break;
                 }
-                $this->body = $this->readability->dom->createElement('div');
+                if ($readability->dom === null) {
+                    break;
+                }
+                $newBody = $readability->dom->createElement('div');
                 $this->debug($elems->length.' body elems found');
                 foreach ($elems as $elem) {
+                    if (! $elem instanceof \DOMElement) {
+                        continue;
+                    }
                     if (! isset($elem->parentNode)) {
                         continue;
                     }
                     $isDescendant = false;
-                    foreach ($this->body->childNodes as $parent) {
-                        if ($this->isDescendant($parent, $elem)) {
+                    foreach ($newBody->childNodes as $parent) {
+                        if ($parent instanceof \DOMElement && $this->isDescendant($parent, $elem)) {
                             $isDescendant = true;
                             break;
                         }
@@ -496,15 +554,16 @@ class ContentExtractor
                     if ($isDescendant) {
                         $this->debug('...element is child of another body element, skipping.');
                     } else {
-                        if ($this->config->prune()) {
+                        if ($config->prune()) {
                             $this->debug('Pruning content');
-                            $this->readability->prepArticle($elem);
+                            $readability->prepArticle($elem);
                         }
                         $this->debug('...element added to body');
-                        $this->body->appendChild($elem);
+                        $newBody->appendChild($elem);
                     }
                 }
-                if ($this->body->hasChildNodes()) {
+                if ($newBody->hasChildNodes()) {
+                    $this->body = $newBody;
                     break;
                 }
 
@@ -513,32 +572,40 @@ class ContentExtractor
 
         $detect_title = $detect_body = $detect_author = $detect_date = false;
         if (! isset($this->title)) {
-            if (empty($this->config->title) || $this->config->autodetect_on_failure()) {
+            if (empty($config->title) || $config->autodetect_on_failure()) {
                 $detect_title = true;
             }
         }
         if (! isset($this->body)) {
-            if (empty($this->config->body) || $this->config->autodetect_on_failure()) {
+            if (empty($config->body) || $config->autodetect_on_failure()) {
                 $detect_body = true;
             }
         }
         if (empty($this->author)) {
-            if (empty($this->config->author) || $this->config->autodetect_on_failure()) {
+            if (empty($config->author) || $config->autodetect_on_failure()) {
                 $detect_author = true;
             }
         }
         if (! isset($this->date)) {
-            if (empty($this->config->date) || $this->config->autodetect_on_failure()) {
+            if (empty($config->date) || $config->autodetect_on_failure()) {
                 $detect_date = true;
             }
         }
 
-        if (! $this->config->skip_json_ld()) {
-            $elems = @$xpath->query("//script[@type='application/ld+json']", $this->readability->dom);
+        $readability = $this->readability;
+        if ($readability === null || $readability->dom === null) {
+            return false;
+        }
+
+        if (! $config->skip_json_ld()) {
+            $elems = @$xpath->query("//script[@type='application/ld+json']", $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('JSON+LD: found script tag');
                 $jsonld = [];
                 foreach ($elems as $elem) {
+                    if (! $elem instanceof \DOMElement) {
+                        continue;
+                    }
                     $_jsonld = @json_decode($elem->textContent);
                     if (! $_jsonld) {
                         continue;
@@ -595,71 +662,85 @@ class ContentExtractor
         }
         if ($detect_title || $detect_body) {
             $elems = @$xpath->query("//*[contains(concat(' ',normalize-space(@class),' '),' hentry ')]",
-                $this->readability->dom);
+                $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('hNews: found hentry');
                 $hentry = $elems->item(0);
+                if (! $hentry instanceof \DOMElement) {
+                    $hentry = null;
+                }
 
-                if ($detect_title) {
+                if ($detect_title && $hentry !== null) {
                     $elems = @$xpath->query(".//*[contains(concat(' ',normalize-space(@class),' '),' entry-title ')]",
                         $hentry);
                     if ($elems && $elems->length > 0) {
-                        $this->title = $elems->item(0)->textContent;
-                        $this->debug('hNews: found entry-title: '.$this->title);
-                        $elems->item(0)->parentNode->removeChild($elems->item(0));
-                        $detect_title = false;
-                    }
-                }
-
-                if ($detect_date) {
-                    $elems = @$xpath->query(".//time[@pubdate or @pubDate] | .//abbr[contains(concat(' ',normalize-space(@class),' '),' published ')]",
-                        $hentry);
-                    if ($elems && $elems->length > 0) {
-                        $this->date = strtotime(mb_trim($elems->item(0)->textContent));
-                        if ($this->date) {
-                            $this->debug('hNews: found publication date: '.date('Y-m-d H:i:s', $this->date));
-                            $detect_date = false;
-                        } else {
-                            $this->date = null;
+                        $item = $elems->item(0);
+                        if ($item instanceof \DOMElement) {
+                            $this->title = $item->textContent;
+                            $this->debug('hNews: found entry-title: '.$this->title);
+                            if ($item->parentNode !== null) {
+                                $item->parentNode->removeChild($item);
+                            }
+                            $detect_title = false;
                         }
                     }
                 }
 
-                if ($detect_author) {
+                if ($detect_date && $hentry !== null) {
+                    $elems = @$xpath->query(".//time[@pubdate or @pubDate] | .//abbr[contains(concat(' ',normalize-space(@class),' '),' published ')]",
+                        $hentry);
+                    if ($elems && $elems->length > 0) {
+                        $item = $elems->item(0);
+                        if ($item instanceof \DOMElement) {
+                            $dateValue = strtotime(mb_trim($item->textContent));
+                            if ($dateValue !== false) {
+                                $this->date = $dateValue;
+                                $this->debug('hNews: found publication date: '.date('Y-m-d H:i:s', $this->date));
+                                $detect_date = false;
+                            } else {
+                                $this->date = null;
+                            }
+                        }
+                    }
+                }
+
+                if ($detect_author && $hentry !== null) {
                     $elems = @$xpath->query(".//*[contains(concat(' ',normalize-space(@class),' '),' vcard ') and (contains(concat(' ',normalize-space(@class),' '),' author ') or contains(concat(' ',normalize-space(@class),' '),' byline '))]",
                         $hentry);
                     if ($elems && $elems->length > 0) {
                         $author = $elems->item(0);
-                        $fn = @$xpath->query(".//*[contains(concat(' ',normalize-space(@class),' '),' fn ')]", $author);
-                        if ($fn && $fn->length > 0) {
-                            foreach ($fn as $_fn) {
-                                if (mb_trim($_fn->textContent) !== '') {
-                                    $this->author[] = mb_trim($_fn->textContent);
-                                    $this->debug('hNews: found author: '.mb_trim($_fn->textContent));
+                        if ($author instanceof \DOMElement) {
+                            $fn = @$xpath->query(".//*[contains(concat(' ',normalize-space(@class),' '),' fn ')]", $author);
+                            if ($fn && $fn->length > 0) {
+                                foreach ($fn as $_fn) {
+                                    if ($_fn instanceof \DOMElement && mb_trim($_fn->textContent) !== '') {
+                                        $this->author[] = mb_trim($_fn->textContent);
+                                        $this->debug('hNews: found author: '.mb_trim($_fn->textContent));
+                                    }
+                                }
+                            } else {
+                                if (mb_trim($author->textContent) !== '') {
+                                    $this->author[] = mb_trim($author->textContent);
+                                    $this->debug('hNews: found author: '.mb_trim($author->textContent));
                                 }
                             }
-                        } else {
-                            if (mb_trim($author->textContent) !== '') {
-                                $this->author[] = mb_trim($author->textContent);
-                                $this->debug('hNews: found author: '.mb_trim($author->textContent));
-                            }
+                            $detect_author = empty($this->author);
                         }
-                        $detect_author = empty($this->author);
                     }
                 }
 
-                if ($detect_body) {
+                if ($detect_body && $hentry !== null) {
                     $elems = @$xpath->query(".//*[contains(concat(' ',normalize-space(@class),' '),' entry-content ')]",
                         $hentry);
                     if ($elems && $elems->length > 0) {
                         $this->debug('hNews: found entry-content');
                         if ($elems->length === 1) {
                             $e = $elems->item(0);
-                            if (($e->tagName === 'img') || (mb_trim($e->textContent) !== '')) {
-                                $this->body = $elems->item(0);
-                                if ($this->config->prune()) {
+                            if ($e instanceof \DOMElement && (($e->tagName === 'img') || (mb_trim($e->textContent) !== ''))) {
+                                $this->body = $e;
+                                if ($config->prune()) {
                                     $this->debug('Pruning content');
-                                    $this->readability->prepArticle($this->body);
+                                    $readability->prepArticle($e);
                                 }
                                 $detect_body = false;
                             } else {
@@ -667,15 +748,18 @@ class ContentExtractor
                             }
                             unset($e);
                         } else {
-                            $this->body = $this->readability->dom->createElement('div');
+                            $newBody = $readability->dom->createElement('div');
                             $this->debug($elems->length.' entry-content elems found');
                             foreach ($elems as $elem) {
+                                if (! $elem instanceof \DOMElement) {
+                                    continue;
+                                }
                                 if (! isset($elem->parentNode)) {
                                     continue;
                                 }
                                 $isDescendant = false;
-                                foreach ($this->body->childNodes as $parent) {
-                                    if ($this->isDescendant($parent, $elem)) {
+                                foreach ($newBody->childNodes as $parent) {
+                                    if ($parent instanceof \DOMElement && $this->isDescendant($parent, $elem)) {
                                         $isDescendant = true;
                                         break;
                                     }
@@ -683,14 +767,15 @@ class ContentExtractor
                                 if ($isDescendant) {
                                     $this->debug('Element is child of another body element, skipping.');
                                 } else {
-                                    if ($this->config->prune()) {
+                                    if ($config->prune()) {
                                         $this->debug('Pruning content');
-                                        $this->readability->prepArticle($elem);
+                                        $readability->prepArticle($elem);
                                     }
                                     $this->debug('Element added to body');
-                                    $this->body->appendChild($elem);
+                                    $newBody->appendChild($elem);
                                 }
                             }
+                            $this->body = $newBody;
                             $detect_body = false;
                         }
                     }
@@ -700,39 +785,47 @@ class ContentExtractor
 
         if ($detect_title) {
             $elems = @$xpath->query("//*[contains(concat(' ',normalize-space(@class),' '),' instapaper_title ')]",
-                $this->readability->dom);
+                $readability->dom);
             if ($elems && $elems->length > 0) {
-                $this->title = $elems->item(0)->textContent;
-                $this->debug('Title found (.instapaper_title): '.$this->title);
-                $elems->item(0)->parentNode->removeChild($elems->item(0));
-                $detect_title = false;
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $this->title = $item->textContent;
+                    $this->debug('Title found (.instapaper_title): '.$this->title);
+                    if ($item->parentNode !== null) {
+                        $item->parentNode->removeChild($item);
+                    }
+                    $detect_title = false;
+                }
             }
         }
         if ($detect_body) {
             $elems = @$xpath->query("//*[contains(concat(' ',normalize-space(@class),' '),' instapaper_body ')]",
-                $this->readability->dom);
+                $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('body found (.instapaper_body)');
-                $this->body = $elems->item(0);
-                if ($this->config->prune()) {
-                    $this->debug('Pruning content');
-                    $this->readability->prepArticle($this->body);
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $this->body = $item;
+                    if ($config->prune()) {
+                        $this->debug('Pruning content');
+                        $readability->prepArticle($item);
+                    }
                 }
                 $detect_body = false;
             }
         }
 
         if ($detect_body) {
-            $elems = @$xpath->query("//*[@itemprop='articleBody']", $this->readability->dom);
+            $elems = @$xpath->query("//*[@itemprop='articleBody']", $readability->dom);
             if ($elems && $elems->length > 0) {
                 $this->debug('body found (Schema.org itemprop="articleBody")');
                 if ($elems->length === 1) {
                     $e = $elems->item(0);
-                    if (($e->tagName === 'img') || (mb_trim($e->textContent) !== '')) {
-                        $this->body = $elems->item(0);
-                        if ($this->config->prune()) {
+                    if ($e instanceof \DOMElement && (($e->tagName === 'img') || (mb_trim($e->textContent) !== ''))) {
+                        $this->body = $e;
+                        if ($config->prune()) {
                             $this->debug('Pruning content');
-                            $this->readability->prepArticle($this->body);
+                            $readability->prepArticle($e);
                         }
                         $detect_body = false;
                     } else {
@@ -740,15 +833,21 @@ class ContentExtractor
                     }
                     unset($e);
                 } else {
-                    $this->body = $this->readability->dom->createElement('div');
+                    if ($readability->dom === null) {
+                        return $this->success;
+                    }
+                    $newBody = $readability->dom->createElement('div');
                     $this->debug($elems->length.' itemprop="articleBody" elems found');
                     foreach ($elems as $elem) {
+                        if (! $elem instanceof \DOMElement) {
+                            continue;
+                        }
                         if (! isset($elem->parentNode)) {
                             continue;
                         }
                         $isDescendant = false;
-                        foreach ($this->body->childNodes as $parent) {
-                            if ($this->isDescendant($parent, $elem)) {
+                        foreach ($newBody->childNodes as $parent) {
+                            if ($parent instanceof \DOMElement && $this->isDescendant($parent, $elem)) {
                                 $isDescendant = true;
                                 break;
                             }
@@ -756,14 +855,15 @@ class ContentExtractor
                         if ($isDescendant) {
                             $this->debug('Element is child of another body element, skipping.');
                         } else {
-                            if ($this->config->prune()) {
+                            if ($config->prune()) {
                                 $this->debug('Pruning content');
-                                $this->readability->prepArticle($elem);
+                                $readability->prepArticle($elem);
                             }
                             $this->debug('Element added to body');
-                            $this->body->appendChild($elem);
+                            $newBody->appendChild($elem);
                         }
                     }
+                    $this->body = $newBody;
                     $detect_body = false;
                 }
             }
@@ -771,39 +871,50 @@ class ContentExtractor
 
         if ($detect_author) {
             $elems = @$xpath->query("//a[contains(concat(' ',normalize-space(@rel),' '),' author ')]",
-                $this->readability->dom);
+                $readability->dom);
             if ($elems && $elems->length === 1) {
-                $author = mb_trim($elems->item(0)->textContent);
-                if ($author !== '') {
-                    $this->debug("Author found (rel=\"author\"): $author");
-                    $this->author[] = $author;
-                    $detect_author = false;
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $author = mb_trim($item->textContent);
+                    if ($author !== '') {
+                        $this->debug("Author found (rel=\"author\"): $author");
+                        $this->author[] = $author;
+                        $detect_author = false;
+                    }
                 }
             }
         }
 
         if ($detect_date) {
-            $elems = @$xpath->query("//meta[@property='article:published_time' and @content]", $this->readability->dom);
+            $elems = @$xpath->query("//meta[@property='article:published_time' and @content]", $readability->dom);
             if ($elems && $elems->length === 1) {
-                $this->date = strtotime(mb_trim($elems->item(0)->getAttribute('content')));
-                if ($this->date) {
-                    $this->debug('Date found (article:published_time): '.date('Y-m-d H:i:s', $this->date));
-                    $detect_date = false;
-                } else {
-                    $this->date = null;
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $dateValue = strtotime(mb_trim($item->getAttribute('content')));
+                    if ($dateValue !== false) {
+                        $this->date = $dateValue;
+                        $this->debug('Date found (article:published_time): '.date('Y-m-d H:i:s', $this->date));
+                        $detect_date = false;
+                    } else {
+                        $this->date = null;
+                    }
                 }
             }
         }
 
         if ($detect_date) {
-            $elems = @$xpath->query('//time[@pubdate or @pubDate]', $this->readability->dom);
+            $elems = @$xpath->query('//time[@pubdate or @pubDate]', $readability->dom);
             if ($elems && $elems->length === 1) {
-                $this->date = strtotime(mb_trim($elems->item(0)->textContent));
-                if ($this->date) {
-                    $this->debug('Date found (pubdate marked time element): '.date('Y-m-d H:i:s', $this->date));
-                    $detect_date = false;
-                } else {
-                    $this->date = null;
+                $item = $elems->item(0);
+                if ($item instanceof \DOMElement) {
+                    $dateValue = strtotime(mb_trim($item->textContent));
+                    if ($dateValue !== false) {
+                        $this->date = $dateValue;
+                        $this->debug('Date found (pubdate marked time element): '.date('Y-m-d H:i:s', $this->date));
+                        $detect_date = false;
+                    } else {
+                        $this->date = null;
+                    }
                 }
             }
         }
@@ -812,59 +923,73 @@ class ContentExtractor
         if ($detect_title || $detect_body) {
             $this->debug('Using Readability');
             if (isset($this->body)) {
-                $this->body = $this->body->cloneNode(true);
+                $clonedBody = $this->body->cloneNode(true);
+                if ($clonedBody instanceof \DOMElement) {
+                    $this->body = $clonedBody;
+                }
             }
-            $success = $this->readability->init();
+            $success = $readability->init();
         }
         if ($detect_title) {
             $this->debug('Detecting title');
-            $this->title = $this->readability->getTitle()->textContent;
+            $titleElem = $readability->getTitle();
+            if ($titleElem !== null) {
+                $this->title = $titleElem->textContent;
+            }
         }
         if ($detect_body && $success) {
             $this->debug('Detecting body');
-            $this->body = $this->readability->getContent();
-            if ($this->body->childNodes->length === 1 && $this->body->firstChild->nodeType === XML_ELEMENT_NODE) {
-                $this->body = $this->body->firstChild;
-            }
-            if ($this->config->prune()) {
-                $this->debug('Pruning content');
-                $this->readability->prepArticle($this->body);
+            $content = $readability->getContent();
+            if ($content !== null) {
+                $this->body = $content;
+                $firstChildNode = $this->body->firstChild;
+                if ($this->body->childNodes->length === 1 && $firstChildNode !== null && $firstChildNode->nodeType === XML_ELEMENT_NODE && $firstChildNode instanceof \DOMElement) {
+                    $this->body = $firstChildNode;
+                }
+                $body = $this->body;
+                if ($config->prune()) {
+                    $this->debug('Pruning content');
+                    $readability->prepArticle($body);
+                }
             }
         }
         if (isset($this->body)) {
-            $this->readability->removeScripts($this->body);
+            $readability->removeScripts($this->body);
             if (! $is_next_page) {
                 if (isset($this->title) && ($this->title !== '') && $this->body->hasChildNodes()) {
                     $firstChild = $this->body->firstChild;
-                    while ($firstChild->nodeType && ($firstChild->nodeType !== XML_ELEMENT_NODE)) {
+                    while ($firstChild !== null && $firstChild->nodeType && ($firstChild->nodeType !== XML_ELEMENT_NODE)) {
                         $firstChild = $firstChild->nextSibling;
                     }
-                    if (($firstChild !== null) && ($firstChild->nodeType === XML_ELEMENT_NODE)
+                    if ($firstChild instanceof \DOMElement
                         && in_array(mb_strtolower($firstChild->tagName), ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
                         && (mb_strtolower(mb_trim($firstChild->textContent)) === mb_strtolower(mb_trim($this->title)))) {
                         $this->body->removeChild($firstChild);
                     }
                 }
             }
-            $_dont_self_close = ['iframe', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
-            foreach ($_dont_self_close as $_tagname) {
-                if ($this->body->tagName === $_tagname) {
-                    if (! $this->body->hasChildNodes()) {
-                        if ($_tagname === 'iframe') {
-                            $this->body->appendChild($this->body->ownerDocument->createTextNode('[embedded content]'));
-                        } else {
-                            $this->body->appendChild($this->body->ownerDocument->createTextNode(''));
-                        }
-                    }
-                } else {
-                    $elems = $this->body->getElementsByTagName($_tagname);
-                    for ($i = $elems->length - 1; $i >= 0; $i--) {
-                        $e = $elems->item($i);
-                        if (! $e->hasChildNodes()) {
+            $bodyOwnerDocument = $this->body->ownerDocument;
+            if ($bodyOwnerDocument !== null) {
+                $_dont_self_close = ['iframe', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+                foreach ($_dont_self_close as $_tagname) {
+                    if ($this->body->tagName === $_tagname) {
+                        if (! $this->body->hasChildNodes()) {
                             if ($_tagname === 'iframe') {
-                                $e->appendChild($this->body->ownerDocument->createTextNode('[embedded content]'));
+                                $this->body->appendChild($bodyOwnerDocument->createTextNode('[embedded content]'));
                             } else {
-                                $e->appendChild($this->body->ownerDocument->createTextNode(''));
+                                $this->body->appendChild($bodyOwnerDocument->createTextNode(''));
+                            }
+                        }
+                    } else {
+                        $elems = $this->body->getElementsByTagName($_tagname);
+                        for ($i = $elems->length - 1; $i >= 0; $i--) {
+                            $e = $elems->item($i);
+                            if ($e instanceof \DOMElement && ! $e->hasChildNodes()) {
+                                if ($_tagname === 'iframe') {
+                                    $e->appendChild($bodyOwnerDocument->createTextNode('[embedded content]'));
+                                } else {
+                                    $e->appendChild($bodyOwnerDocument->createTextNode(''));
+                                }
                             }
                         }
                     }
@@ -872,55 +997,79 @@ class ContentExtractor
             }
 
             $elems = @$xpath->query('.//img[@data-lazy-src]', $this->body);
-            for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $e = $elems->item($i);
-                if ($e->nextSibling !== null && $e->nextSibling->nodeName === 'noscript') {
-                    $_new_elem = $e->ownerDocument->createDocumentFragment();
-                    @$_new_elem->appendXML($e->nextSibling->innerHTML);
-                    $e->nextSibling->parentNode->replaceChild($_new_elem, $e->nextSibling);
-                    $e->parentNode->removeChild($e);
-                } else {
-                    $e->setAttribute('src', $e->getAttribute('data-lazy-src'));
-                    $e->removeAttribute('data-lazy-src');
+            if ($elems !== false) {
+                for ($i = $elems->length - 1; $i >= 0; $i--) {
+                    $e = $elems->item($i);
+                    if ($e instanceof \DOMElement && $e->nextSibling !== null && $e->nextSibling->nodeName === 'noscript') {
+                        $eOwnerDocument = $e->ownerDocument;
+                        $nextSibling = $e->nextSibling;
+                        if ($eOwnerDocument !== null && $nextSibling instanceof \DOMElement && property_exists($nextSibling, 'innerHTML')) {
+                            $_new_elem = $eOwnerDocument->createDocumentFragment();
+                            @$_new_elem->appendXML($nextSibling->innerHTML);
+                            if ($nextSibling->parentNode !== null) {
+                                $nextSibling->parentNode->replaceChild($_new_elem, $nextSibling);
+                            }
+                            if ($e->parentNode !== null) {
+                                $e->parentNode->removeChild($e);
+                            }
+                        }
+                    } elseif ($e instanceof \DOMElement) {
+                        $e->setAttribute('src', $e->getAttribute('data-lazy-src'));
+                        $e->removeAttribute('data-lazy-src');
+                    }
                 }
             }
             $elems = @$xpath->query(".//img[(@data-src or @data-srcset) and (contains(@src, 'data:image') or contains(@src, '.gif'))]",
                 $this->body);
-            for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $e = $elems->item($i);
-                if ($e->hasAttribute('data-src')) {
-                    $e->setAttribute('src', $e->getAttribute('data-src'));
-                    $e->removeAttribute('data-src');
-                }
-                if ($e->hasAttribute('data-srcset')) {
-                    $e->setAttribute('srcset', $e->getAttribute('data-srcset'));
-                    $e->removeAttribute('data-srcset');
+            if ($elems !== false) {
+                for ($i = $elems->length - 1; $i >= 0; $i--) {
+                    $e = $elems->item($i);
+                    if ($e instanceof \DOMElement) {
+                        if ($e->hasAttribute('data-src')) {
+                            $e->setAttribute('src', $e->getAttribute('data-src'));
+                            $e->removeAttribute('data-src');
+                        }
+                        if ($e->hasAttribute('data-srcset')) {
+                            $e->setAttribute('srcset', $e->getAttribute('data-srcset'));
+                            $e->removeAttribute('data-srcset');
+                        }
+                    }
                 }
             }
             $elems = @$xpath->query(".//source[@data-srcset and (not(@srcset) or contains(@srcset, 'data:image'))]",
                 $this->body);
-            for ($i = $elems->length - 1; $i >= 0; $i--) {
-                $e = $elems->item($i);
-                $e->setAttribute('srcset', $e->getAttribute('data-srcset'));
-                $e->removeAttribute('data-srcset');
+            if ($elems !== false) {
+                for ($i = $elems->length - 1; $i >= 0; $i--) {
+                    $e = $elems->item($i);
+                    if ($e instanceof \DOMElement) {
+                        $e->setAttribute('srcset', $e->getAttribute('data-srcset'));
+                        $e->removeAttribute('data-srcset');
+                    }
+                }
             }
             if ($this->stripImages && $this->body->hasChildNodes()) {
                 $elems = @$xpath->query('.//picture | .//figure | .//img | .//figcaption', $this->body);
                 if ($elems && $elems->length > 0) {
                     $this->debug('Stripping images: '.$elems->length.' img/picture/figure/figcaption elements');
                     for ($i = $elems->length - 1; $i >= 0; $i--) {
-                        @$elems->item($i)->parentNode->removeChild($elems->item($i));
+                        $item = $elems->item($i);
+                        if ($item instanceof \DOMNode && $item->parentNode !== null) {
+                            @$item->parentNode->removeChild($item);
+                        }
                     }
                 }
             } else {
                 if (! $is_next_page) {
-                    if ($this->config->insert_detected_image() && $this->body->hasChildNodes() && isset($this->opengraph['og:image']) && mb_substr($this->opengraph['og:image'],
+                    if ($config->insert_detected_image() && $this->body->hasChildNodes() && isset($this->opengraph['og:image']) && mb_substr($this->opengraph['og:image'],
                         0, 4) === 'http') {
                         $elems = @$xpath->query('.//img', $this->body);
-                        if ($elems->length === 0) {
-                            $_new_elem = $this->body->ownerDocument->createDocumentFragment();
-                            @$_new_elem->appendXML('<div><img src="'.htmlspecialchars($this->opengraph['og:image']).'" class="ff-og-image-inserted" /></div>');
-                            $this->body->insertBefore($_new_elem, $this->body->firstChild);
+                        if ($elems !== false && $elems->length === 0) {
+                            $bodyOwnerDoc = $this->body->ownerDocument;
+                            if ($bodyOwnerDoc !== null) {
+                                $_new_elem = $bodyOwnerDoc->createDocumentFragment();
+                                @$_new_elem->appendXML('<div><img src="'.htmlspecialchars($this->opengraph['og:image']).'" class="ff-og-image-inserted" /></div>');
+                                $this->body->insertBefore($_new_elem, $this->body->firstChild);
+                            }
                         }
                     }
                 }

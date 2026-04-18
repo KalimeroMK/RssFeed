@@ -26,10 +26,13 @@ class JSLikeHTMLElement extends DOMElement
     {
         if ($name === 'innerHTML') {
             for ($x = $this->childNodes->length - 1; $x >= 0; $x--) {
-                $this->removeChild($this->childNodes->item($x));
+                $child = $this->childNodes->item($x);
+                if ($child !== null) {
+                    $this->removeChild($child);
+                }
             }
 
-            if ($value !== '' && $value !== null) {
+            if ($value !== '' && $value !== null && $this->ownerDocument !== null) {
                 $f = $this->ownerDocument->createDocumentFragment();
                 // appendXML() expects well-formed markup (XHTML)
                 $result = @$f->appendXML($value); // @ to suppress PHP warnings
@@ -58,7 +61,7 @@ class JSLikeHTMLElement extends DOMElement
      */
     public function __get(string $name): ?string
     {
-        if ($name === 'innerHTML') {
+        if ($name === 'innerHTML' && $this->ownerDocument !== null) {
             $inner = '';
             foreach ($this->childNodes as $child) {
                 $inner .= $this->ownerDocument->saveXML($child);

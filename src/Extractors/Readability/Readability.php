@@ -24,9 +24,10 @@ namespace Kalimeromk\Rssfeed\Extractors\Readability;
 use DOMAttr;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
+use DOMNodeList;
 use DOMXPath;
 use Exception;
-use Layershifter\Gumbo\Parser;
 use Masterminds\HTML5;
 use stdClass;
 
@@ -81,22 +82,22 @@ class Readability
     /**
      * Create instance of Readability
      *
-     * @param  string UTF-8 encoded string
-     * @param  string (optional) URL associated with HTML (used for footnotes)
-     * @param  string which parser to use for turning raw HTML into a DOMDocument (either 'libxml' or 'html5lib')
+     * @param  string  $html  UTF-8 encoded string
+     * @param  string|null  $url  (optional) URL associated with HTML (used for footnotes)
+     * @param  string  $parser  which parser to use for turning raw HTML into a DOMDocument (either 'libxml' or 'html5lib')
      */
     public function __construct(string $html, ?string $url = null, string $parser = 'libxml')
     {
         $this->url = $url;
-        $html = preg_replace($this->regexps['replaceBrs'], '</p><p>', $html);
-        $html = preg_replace($this->regexps['replaceFonts'], '<$1span>', $html);
+        $html = (string) preg_replace($this->regexps['replaceBrs'], '</p><p>', $html);
+        $html = (string) preg_replace($this->regexps['replaceFonts'], '<$1span>', $html);
         if (mb_trim($html) === '') {
             $html = '<html></html>';
         }
 
         if ($parser === 'gumbo') {
             $html = str_replace('&apos;', "'", $html);
-            $this->dom = @Parser::load($html);
+            $this->dom = null;
         } elseif ($parser === 'html5lib' || $parser === 'html5php') {
             $html5 = new HTML5(['disable_html_ns' => true]);
             $this->dom = $html5->loadHTML($html);
@@ -141,35 +142,39 @@ class Readability
      */
     public function init(): bool
     {
-        if (! isset($this->dom->documentElement)) {
+        if ($this->dom === null || ! isset($this->dom->documentElement)) {
             return false;
         }
-        $this->removeScripts($this->dom);
+        $dom = $this->dom;
+        $this->removeScripts($dom);
 
         $this->success = true;
 
-        $bodyElems = $this->dom->getElementsByTagName('body');
+        $bodyElems = $dom->getElementsByTagName('body');
         if ($bodyElems->length > 0) {
-            if ($this->bodyCache === null) {
-                $this->bodyCache = $bodyElems->item(0)->innerHTML;
-            }
-            if ($this->body === null) {
-                $this->body = $bodyElems->item(0);
+            $bodyItem = $bodyElems->item(0);
+            if ($bodyItem instanceof DOMElement) {
+                if ($this->bodyCache === null) {
+                    $this->bodyCache = $this->getInnerHtml($bodyItem);
+                }
+                if ($this->body === null) {
+                    $this->body = $bodyItem;
+                }
             }
         }
 
         $this->prepDocument();
 
-        $overlay = $this->dom->createElement('div');
-        $innerDiv = $this->dom->createElement('div');
+        $overlay = $dom->createElement('div');
+        $innerDiv = $dom->createElement('div');
         $articleTitle = $this->getArticleTitle();
         $articleContent = $this->grabArticle();
 
         if (! $articleContent) {
             $this->success = false;
-            $articleContent = $this->dom->createElement('div');
+            $articleContent = $dom->createElement('div');
             $articleContent->setAttribute('id', 'readability-content');
-            $articleContent->innerHTML = '<p>Sorry, Readability was unable to parse this page for content.</p>';
+            $this->setInnerHtml($articleContent, '<p>Sorry, Readability was unable to parse this page for content.</p>');
         }
 
         $overlay->setAttribute('id', 'readOverlay');
@@ -179,13 +184,14 @@ class Readability
         $innerDiv->appendChild($articleContent);
         $overlay->appendChild($innerDiv);
 
-        if (! isset($this->body->childNodes)) {
-            $this->body = $this->dom->createElement('div');
+        if ($this->body === null || ! isset($this->body->childNodes)) {
+            $this->body = $dom->createElement('div');
         }
 
-        $this->body->innerHTML = '';
-        $this->body->appendChild($overlay);
-        $this->body->removeAttribute('style');
+        $body = $this->body;
+        $this->setInnerHtml($body, '');
+        $body->appendChild($overlay);
+        $body->removeAttribute('style');
 
         $this->postProcessContent($articleContent);
 
@@ -212,11 +218,16 @@ class Readability
      */
     public function addFootnotes(DOMElement $articleContent): void
     {
-        $footnotesWrapper = $this->dom->createElement('div');
-        $footnotesWrapper->setAttribute('id', 'readability-footnotes');
-        $footnotesWrapper->innerHTML = '<h3>References</h3>';
+        $dom = $this->dom;
+        if ($dom === null) {
+            return;
+        }
 
-        $articleFootnotes = $this->dom->createElement('ol');
+        $footnotesWrapper = $dom->createElement('div');
+        $footnotesWrapper->setAttribute('id', 'readability-footnotes');
+        $this->setInnerHtml($footnotesWrapper, '<h3>References</h3>');
+
+        $articleFootnotes = $dom->createElement('ol');
         $articleFootnotes->setAttribute('id', 'readability-footnotes-list');
         $footnotesWrapper->appendChild($articleFootnotes);
 
@@ -225,9 +236,15 @@ class Readability
         $linkCount = 0;
         for ($i = 0; $i < $articleLinks->length; $i++) {
             $articleLink = $articleLinks->item($i);
+            if (! $articleLink instanceof DOMElement) {
+                continue;
+            }
             $footnoteLink = $articleLink->cloneNode(true);
-            $refLink = $this->dom->createElement('a');
-            $footnote = $this->dom->createElement('li');
+            if (! $footnoteLink instanceof DOMElement) {
+                continue;
+            }
+            $refLink = $dom->createElement('a');
+            $footnote = $dom->createElement('li');
             $linkDomain = @parse_url($footnoteLink->getAttribute('href'), PHP_URL_HOST);
             if (! $linkDomain && isset($this->url)) {
                 $linkDomain = @parse_url($this->url, PHP_URL_HOST);
@@ -243,27 +260,28 @@ class Readability
             $linkCount++;
 
             $refLink->setAttribute('href', '#readabilityFootnoteLink-'.$linkCount);
-            $refLink->innerHTML = '<small><sup>['.$linkCount.']</sup></small>';
+            $this->setInnerHtml($refLink, '<small><sup>['.$linkCount.']</sup></small>');
             $refLink->setAttribute('class', 'readability-DoNotFootnote');
             $refLink->setAttribute('style', 'color: inherit;');
 
-            if ($articleLink->parentNode->lastChild === $articleLink) {
+            if ($articleLink->parentNode !== null && $articleLink->parentNode->lastChild === $articleLink) {
                 $articleLink->parentNode->appendChild($refLink);
-            } else {
+            } elseif ($articleLink->parentNode !== null && $articleLink->nextSibling !== null) {
                 $articleLink->parentNode->insertBefore($refLink, $articleLink->nextSibling);
             }
 
             $articleLink->setAttribute('style', 'color: inherit; text-decoration: none;');
             $articleLink->setAttribute('name', 'readabilityLink-'.$linkCount);
 
-            $footnote->innerHTML = '<small><sup><a href="#readabilityLink-'.$linkCount.'" title="Jump to Link in Article">^</a></sup></small> ';
+            $this->setInnerHtml($footnote, '<small><sup><a href="#readabilityLink-'.$linkCount.'" title="Jump to Link in Article">^</a></sup></small> ');
 
-            $footnoteLink->innerHTML = ($footnoteLink->getAttribute('title') !== '' ? $footnoteLink->getAttribute('title') : $linkText);
+            $footnoteTitle = $footnoteLink->getAttribute('title');
+            $this->setInnerHtml($footnoteLink, ($footnoteTitle !== '' ? $footnoteTitle : $linkText));
             $footnoteLink->setAttribute('name', 'readabilityFootnoteLink-'.$linkCount);
 
             $footnote->appendChild($footnoteLink);
             if ($linkDomain) {
-                $footnote->innerHTML = $footnote->innerHTML.'<small> ('.$linkDomain.')</small>';
+                $this->setInnerHtml($footnote, $this->getInnerHtml($footnote).'<small> ('.$linkDomain.')</small>');
             }
 
             $articleFootnotes->appendChild($footnote);
@@ -280,11 +298,23 @@ class Readability
      */
     public function revertReadabilityStyledElements(DOMElement $articleContent): void
     {
-        $xpath = new DOMXPath($articleContent->ownerDocument);
+        $ownerDoc = $articleContent->ownerDocument;
+        if ($ownerDoc === null) {
+            return;
+        }
+        $xpath = new DOMXPath($ownerDoc);
         $elems = $xpath->query('.//p[@class="readability-styled"]', $articleContent);
+        if ($elems === false) {
+            return;
+        }
         for ($i = $elems->length - 1; $i >= 0; $i--) {
             $e = $elems->item($i);
-            $e->parentNode->replaceChild($articleContent->ownerDocument->createTextNode($e->textContent), $e);
+            if ($e === null || $e->parentNode === null) {
+                continue;
+            }
+            if ($e instanceof DOMElement) {
+                $e->parentNode->replaceChild($ownerDoc->createTextNode($e->textContent), $e);
+            }
         }
     }
 
@@ -317,19 +347,25 @@ class Readability
 
         $articleParagraphs = $articleContent->getElementsByTagName('p');
         for ($i = $articleParagraphs->length - 1; $i >= 0; $i--) {
-            $imgCount = $articleParagraphs->item($i)->getElementsByTagName('img')->length;
-            $embedCount = $articleParagraphs->item($i)->getElementsByTagName('embed')->length;
-            $objectCount = $articleParagraphs->item($i)->getElementsByTagName('object')->length;
-            $iframeCount = $articleParagraphs->item($i)->getElementsByTagName('iframe')->length;
+            $pItem = $articleParagraphs->item($i);
+            if (! $pItem instanceof DOMElement) {
+                continue;
+            }
+            $imgCount = $pItem->getElementsByTagName('img')->length;
+            $embedCount = $pItem->getElementsByTagName('embed')->length;
+            $objectCount = $pItem->getElementsByTagName('object')->length;
+            $iframeCount = $pItem->getElementsByTagName('iframe')->length;
 
-            if ($imgCount === 0 && $embedCount === 0 && $objectCount === 0 && $iframeCount === 0 && $this->getInnerText($articleParagraphs->item($i),
+            if ($imgCount === 0 && $embedCount === 0 && $objectCount === 0 && $iframeCount === 0 && $this->getInnerText($pItem,
                 false) === '') {
-                $articleParagraphs->item($i)->parentNode->removeChild($articleParagraphs->item($i));
+                if ($pItem->parentNode !== null) {
+                    $pItem->parentNode->removeChild($pItem);
+                }
             }
         }
 
         try {
-            $articleContent->innerHTML = preg_replace('/<br[^>]*>\s*<p/i', '<p', $articleContent->innerHTML);
+            $this->setInnerHtml($articleContent, (string) preg_replace('/<br[^>]*>\s*<p/i', '<p', $this->getInnerHtml($articleContent)));
         } catch (Exception $e) {
             $this->dbg('Cleaning innerHTML of breaks failed. This is an IE strict-block-elements bug. Ignoring.: '.$e);
         }
@@ -343,7 +379,10 @@ class Readability
         $scripts = $doc->getElementsByTagName('script');
         for ($i = $scripts->length - 1; $i >= 0; $i--) {
             try {
-                $scripts->item($i)->parentNode->removeChild($scripts->item($i));
+                $script = $scripts->item($i);
+                if ($script !== null && $script->parentNode !== null) {
+                    $script->parentNode->removeChild($script);
+                }
             } catch (Exception $e) {
             }
         }
@@ -359,14 +398,14 @@ class Readability
     {
         $textContent = '';
 
-        if (! isset($e->textContent) || $e->textContent === '') {
+        if ($e === null || ! isset($e->textContent) || $e->textContent === '') {
             return '';
         }
 
         $textContent = mb_trim($e->textContent);
 
         if ($normalizeSpaces) {
-            return preg_replace($this->regexps['normalize'], ' ', $textContent);
+            return (string) preg_replace($this->regexps['normalize'], ' ', $textContent);
         }
 
         return $textContent;
@@ -387,7 +426,7 @@ class Readability
      */
     public function cleanStyles(?DOMElement $e): void
     {
-        if (! is_object($e)) {
+        if ($e === null) {
             return;
         }
         $elems = $e->getElementsByTagName('*');
@@ -406,7 +445,10 @@ class Readability
         $textLength = mb_strlen($this->getInnerText($e));
         $linkLength = 0;
         for ($i = 0, $il = $links->length; $i < $il; $i++) {
-            $linkLength += mb_strlen($this->getInnerText($links->item($i)));
+            $link = $links->item($i);
+            if ($link instanceof DOMElement) {
+                $linkLength += mb_strlen($this->getInnerText($link));
+            }
         }
         if ($textLength > 0) {
             return $linkLength / $textLength;
@@ -453,9 +495,9 @@ class Readability
      */
     public function killBreaks(DOMElement $node): void
     {
-        $html = $node->innerHTML;
-        $html = preg_replace($this->regexps['killBreaks'], '<br />', $html);
-        $node->innerHTML = $html;
+        $html = $this->getInnerHtml($node);
+        $html = (string) preg_replace($this->regexps['killBreaks'], '<br />', $html);
+        $this->setInnerHtml($node, $html);
     }
 
     /**
@@ -468,21 +510,31 @@ class Readability
         $isEmbed = ($tag === 'iframe' || $tag === 'object' || $tag === 'embed');
 
         for ($y = $targetList->length - 1; $y >= 0; $y--) {
+            $targetItem = $targetList->item($y);
+            if (! $targetItem instanceof DOMElement) {
+                continue;
+            }
             if ($isEmbed) {
                 $attributeValues = '';
-                for ($i = 0, $il = $targetList->item($y)->attributes->length; $i < $il; $i++) {
-                    $attributeValues .= $targetList->item($y)->attributes->item($i)->value.'|';
+                $attributes = $targetItem->attributes;
+                for ($i = 0, $il = $attributes->length; $i < $il; $i++) {
+                    $attr = $attributes->item($i);
+                    if ($attr !== null) {
+                        $attributeValues .= $attr->value.'|';
+                    }
                 }
 
                 if (preg_match($this->regexps['video'], $attributeValues)) {
                     continue;
                 }
 
-                if (preg_match($this->regexps['video'], $targetList->item($y)->innerHTML)) {
+                if (preg_match($this->regexps['video'], $this->getInnerHtml($targetItem))) {
                     continue;
                 }
             }
-            $targetList->item($y)->parentNode->removeChild($targetList->item($y));
+            if ($targetItem->parentNode !== null) {
+                $targetItem->parentNode->removeChild($targetItem);
+            }
         }
     }
 
@@ -501,36 +553,44 @@ class Readability
         $curTagsLength = $tagsList->length;
 
         for ($i = $curTagsLength - 1; $i >= 0; $i--) {
-            $weight = $this->getClassWeight($tagsList->item($i));
-            $contentScore = ($tagsList->item($i)->hasAttribute('readability')) ? (int) $tagsList->item($i)->getAttribute('readability') : 0;
+            $tagItem = $tagsList->item($i);
+            if (! $tagItem instanceof DOMElement) {
+                continue;
+            }
+            $weight = $this->getClassWeight($tagItem);
+            $contentScore = ($tagItem->hasAttribute('readability')) ? (int) $tagItem->getAttribute('readability') : 0;
 
-            $this->dbg('Cleaning Conditionally '.$tagsList->item($i)->tagName.' ('.$tagsList->item($i)->getAttribute('class').':'.$tagsList->item($i)->getAttribute('id').')'.(($tagsList->item($i)->hasAttribute('readability')) ? (' with score '.$tagsList->item($i)->getAttribute('readability')) : ''));
+            $this->dbg('Cleaning Conditionally '.$tagItem->tagName.' ('.$tagItem->getAttribute('class').':'.$tagItem->getAttribute('id').')'.(($tagItem->hasAttribute('readability')) ? (' with score '.$tagItem->getAttribute('readability')) : ''));
 
             if ($weight + $contentScore < 0) {
-                $tagsList->item($i)->parentNode->removeChild($tagsList->item($i));
-            } elseif ($this->getCharCount($tagsList->item($i), ',') < 10) {
-                $p = $tagsList->item($i)->getElementsByTagName('p')->length;
-                $img = $tagsList->item($i)->getElementsByTagName('img')->length;
-                $li = $tagsList->item($i)->getElementsByTagName('li')->length - 100;
-                $input = $tagsList->item($i)->getElementsByTagName('input')->length;
-                $a = $tagsList->item($i)->getElementsByTagName('a')->length;
+                if ($tagItem->parentNode !== null) {
+                    $tagItem->parentNode->removeChild($tagItem);
+                }
+            } elseif ($this->getCharCount($tagItem, ',') < 10) {
+                $p = $tagItem->getElementsByTagName('p')->length;
+                $img = $tagItem->getElementsByTagName('img')->length;
+                $li = $tagItem->getElementsByTagName('li')->length - 100;
+                $input = $tagItem->getElementsByTagName('input')->length;
+                $a = $tagItem->getElementsByTagName('a')->length;
 
                 $embedCount = 0;
-                $embeds = $tagsList->item($i)->getElementsByTagName('embed');
+                $embeds = $tagItem->getElementsByTagName('embed');
                 for ($ei = 0, $il = $embeds->length; $ei < $il; $ei++) {
-                    if (preg_match($this->regexps['video'], $embeds->item($ei)->getAttribute('src'))) {
+                    $embedItem = $embeds->item($ei);
+                    if ($embedItem instanceof DOMElement && preg_match($this->regexps['video'], $embedItem->getAttribute('src'))) {
                         $embedCount++;
                     }
                 }
-                $embeds = $tagsList->item($i)->getElementsByTagName('iframe');
+                $embeds = $tagItem->getElementsByTagName('iframe');
                 for ($ei = 0, $il = $embeds->length; $ei < $il; $ei++) {
-                    if (preg_match($this->regexps['video'], $embeds->item($ei)->getAttribute('src'))) {
+                    $embedItem = $embeds->item($ei);
+                    if ($embedItem instanceof DOMElement && preg_match($this->regexps['video'], $embedItem->getAttribute('src'))) {
                         $embedCount++;
                     }
                 }
 
-                $linkDensity = $this->getLinkDensity($tagsList->item($i));
-                $contentLength = mb_strlen($this->getInnerText($tagsList->item($i)));
+                $linkDensity = $this->getLinkDensity($tagItem);
+                $contentLength = mb_strlen($this->getInnerText($tagItem));
                 $toRemove = false;
 
                 if ($this->lightClean) {
@@ -595,8 +655,8 @@ class Readability
                     }
                 }
 
-                if ($toRemove) {
-                    $tagsList->item($i)->parentNode->removeChild($tagsList->item($i));
+                if ($toRemove && $tagItem->parentNode !== null) {
+                    $tagItem->parentNode->removeChild($tagItem);
                 }
             }
         }
@@ -610,8 +670,13 @@ class Readability
         for ($headerIndex = 1; $headerIndex < 3; $headerIndex++) {
             $headers = $e->getElementsByTagName('h'.$headerIndex);
             for ($i = $headers->length - 1; $i >= 0; $i--) {
-                if ($this->getClassWeight($headers->item($i)) < 0 || $this->getLinkDensity($headers->item($i)) > 0.33) {
-                    $headers->item($i)->parentNode->removeChild($headers->item($i));
+                $headerItem = $headers->item($i);
+                if ($headerItem instanceof DOMElement) {
+                    if ($this->getClassWeight($headerItem) < 0 || $this->getLinkDensity($headerItem) > 0.33) {
+                        if ($headerItem->parentNode !== null) {
+                            $headerItem->parentNode->removeChild($headerItem);
+                        }
+                    }
                 }
             }
         }
@@ -651,26 +716,36 @@ class Readability
         $origTitle = '';
 
         try {
-            $curTitle = $origTitle = $this->getInnerText($this->dom->getElementsByTagName('title')->item(0));
+            if ($this->dom !== null) {
+                $titleNode = $this->dom->getElementsByTagName('title')->item(0);
+                if ($titleNode instanceof DOMElement) {
+                    $curTitle = $origTitle = $this->getInnerText($titleNode);
+                }
+            }
         } catch (Exception $e) {
         }
 
         if (preg_match('/ [\|\-] /', $curTitle)) {
-            $curTitle = preg_replace('/(.*)[\|\-] .*/i', '$1', $origTitle);
+            $curTitle = (string) preg_replace('/(.*)[\|\-] .*/i', '$1', $origTitle);
 
             if (count(explode(' ', $curTitle)) < 3) {
-                $curTitle = preg_replace('/[^\|\-]*[\|\-](.*)/i', '$1', $origTitle);
+                $curTitle = (string) preg_replace('/[^\|\-]*[\|\-](.*)/i', '$1', $origTitle);
             }
         } elseif (mb_strpos($curTitle, ': ') !== false) {
-            $curTitle = preg_replace('/.*:(.*)/i', '$1', $origTitle);
+            $curTitle = (string) preg_replace('/.*:(.*)/i', '$1', $origTitle);
 
             if (count(explode(' ', $curTitle)) < 3) {
-                $curTitle = preg_replace('/[^:]*[:](.*)/i', '$1', $origTitle);
+                $curTitle = (string) preg_replace('/[^:]*[:](.*)/i', '$1', $origTitle);
             }
         } elseif (mb_strlen($curTitle) > 150 || mb_strlen($curTitle) < 15) {
-            $hOnes = $this->dom->getElementsByTagName('h1');
-            if ($hOnes->length === 1) {
-                $curTitle = $this->getInnerText($hOnes->item(0));
+            if ($this->dom !== null) {
+                $hOnes = $this->dom->getElementsByTagName('h1');
+                if ($hOnes->length === 1) {
+                    $hOne = $hOnes->item(0);
+                    if ($hOne instanceof DOMElement) {
+                        $curTitle = $this->getInnerText($hOne);
+                    }
+                }
             }
         }
 
@@ -680,8 +755,11 @@ class Readability
             $curTitle = $origTitle;
         }
 
+        if ($this->dom === null) {
+            return new DOMElement('h1');
+        }
         $articleTitle = $this->dom->createElement('h1');
-        $articleTitle->innerHTML = $curTitle;
+        $this->setInnerHtml($articleTitle, $curTitle);
 
         return $articleTitle;
     }
@@ -692,16 +770,24 @@ class Readability
      */
     protected function prepDocument(): void
     {
+        if ($this->dom === null) {
+            return;
+        }
         if ($this->body === null) {
             $this->body = $this->dom->createElement('body');
-            $this->dom->documentElement->appendChild($this->body);
+            if ($this->dom->documentElement !== null) {
+                $this->dom->documentElement->appendChild($this->body);
+            }
         }
         $this->body->setAttribute('id', 'readabilityBody');
 
         $styleTags = $this->dom->getElementsByTagName('style');
         for ($i = $styleTags->length - 1; $i >= 0; $i--) {
             try {
-                @$styleTags->item($i)->parentNode->removeChild($styleTags->item($i));
+                $styleTag = $styleTags->item($i);
+                if ($styleTag !== null && $styleTag->parentNode !== null) {
+                    @$styleTag->parentNode->removeChild($styleTag);
+                }
             } catch (Exception $e) {
             }
         }
@@ -713,6 +799,9 @@ class Readability
      */
     protected function initializeNode(DOMElement $node): void
     {
+        if ($this->dom === null) {
+            return;
+        }
         $readability = $this->dom->createAttribute('readability');
         $readability->value = '0';
         $node->setAttributeNode($readability);
@@ -778,6 +867,9 @@ class Readability
         if (! $page) {
             $page = $this->dom;
         }
+        if ($page === null) {
+            return false;
+        }
         $allElements = $page->getElementsByTagName('*');
 
         $node = null;
@@ -793,7 +885,9 @@ class Readability
                     $tagName !== 'BODY'
                 ) {
                     $this->dbg('Removing unlikely candidate - '.$unlikelyMatchString);
-                    $node->parentNode->removeChild($node);
+                    if ($node->parentNode !== null) {
+                        $node->parentNode->removeChild($node);
+                    }
                     $nodeIndex--;
 
                     continue;
@@ -805,25 +899,29 @@ class Readability
             }
 
             if ($tagName === 'DIV') {
-                if (! preg_match($this->regexps['divToPElements'], $node->innerHTML)) {
-                    $newNode = $this->dom->createElement('p');
+                if (! preg_match($this->regexps['divToPElements'], $this->getInnerHtml($node))) {
+                    $newNode = $this->dom !== null ? $this->dom->createElement('p') : new DOMElement('p');
                     try {
-                        $newNode->innerHTML = $node->innerHTML;
-                        $node->parentNode->replaceChild($newNode, $node);
+                        $this->setInnerHtml($newNode, $this->getInnerHtml($node));
+                        if ($node->parentNode !== null) {
+                            $node->parentNode->replaceChild($newNode, $node);
+                        }
                         $nodeIndex--;
-                        $nodesToScore[] = $node;
+                        $nodesToScore[] = $newNode;
                     } catch (Exception $e) {
                         $this->dbg('Could not alter div to p, reverting back to div.: '.$e);
                     }
                 } else {
                     for ($i = 0, $il = $node->childNodes->length; $i < $il; $i++) {
                         $childNode = $node->childNodes->item($i);
-                        if ($childNode->nodeType === 3) {
-                            $p = $this->dom->createElement('p');
-                            $p->innerHTML = $childNode->nodeValue;
-                            $p->setAttribute('style', 'display: inline;');
-                            $p->setAttribute('class', 'readability-styled');
-                            $childNode->parentNode->replaceChild($p, $childNode);
+                        if ($childNode !== null && $childNode->nodeType === XML_TEXT_NODE) {
+                            if ($this->dom !== null && $childNode->parentNode !== null) {
+                                $p = $this->dom->createElement('p');
+                                $this->setInnerHtml($p, (string) $childNode->nodeValue);
+                                $p->setAttribute('style', 'display: inline;');
+                                $p->setAttribute('class', 'readability-styled');
+                                $childNode->parentNode->replaceChild($p, $childNode);
+                            }
                         }
                     }
                 }
@@ -833,10 +931,10 @@ class Readability
         $candidates = [];
         for ($pt = 0; $pt < count($nodesToScore); $pt++) {
             $parentNode = $nodesToScore[$pt]->parentNode;
-            $grandParentNode = ! $parentNode ? null : (($parentNode->parentNode instanceof DOMElement) ? $parentNode->parentNode : null);
+            $grandParentNode = ! $parentNode instanceof DOMElement ? null : (($parentNode->parentNode instanceof DOMElement) ? $parentNode->parentNode : null);
             $innerText = $this->getInnerText($nodesToScore[$pt]);
 
-            if (! $parentNode || ! isset($parentNode->tagName)) {
+            if (! $parentNode instanceof DOMElement || ! isset($parentNode->tagName)) {
                 continue;
             }
 
@@ -849,7 +947,7 @@ class Readability
                 $candidates[] = $parentNode;
             }
 
-            if ($grandParentNode && ! $grandParentNode->hasAttribute('readability') && isset($grandParentNode->tagName)) {
+            if ($grandParentNode instanceof DOMElement && ! $grandParentNode->hasAttribute('readability') && isset($grandParentNode->tagName)) {
                 $this->initializeNode($grandParentNode);
                 $candidates[] = $grandParentNode;
             }
@@ -862,79 +960,98 @@ class Readability
 
             $contentScore += min(floor(mb_strlen($innerText) / 100), 3);
 
-            $this->addReadabilityScore($parentNode->getAttributeNode('readability'), $contentScore);
+            $parentReadability = $parentNode->getAttributeNode('readability');
+            if ($parentReadability instanceof DOMAttr) {
+                $this->addReadabilityScore($parentReadability, $contentScore);
+            }
 
-            if ($grandParentNode) {
-                $this->addReadabilityScore($grandParentNode->getAttributeNode('readability'), $contentScore / 2);
+            if ($grandParentNode instanceof DOMElement) {
+                $grandParentReadability = $grandParentNode->getAttributeNode('readability');
+                if ($grandParentReadability instanceof DOMAttr) {
+                    $this->addReadabilityScore($grandParentReadability, $contentScore / 2);
+                }
             }
         }
 
         $topCandidate = null;
         for ($c = 0, $cl = count($candidates); $c < $cl; $c++) {
             $readability = $candidates[$c]->getAttributeNode('readability');
-            $this->multiplyReadabilityScore($readability, 1 - $this->getLinkDensity($candidates[$c]));
+            if ($readability instanceof DOMAttr) {
+                $this->multiplyReadabilityScore($readability, 1 - $this->getLinkDensity($candidates[$c]));
 
-            $this->dbg('Candidate: '.$candidates[$c]->tagName.' ('.$candidates[$c]->getAttribute('class').':'.$candidates[$c]->getAttribute('id').') with score '.$readability->value);
+                $this->dbg('Candidate: '.$candidates[$c]->tagName.' ('.$candidates[$c]->getAttribute('class').':'.$candidates[$c]->getAttribute('id').') with score '.$readability->value);
 
-            if (! $topCandidate || $readability->value > (int) $topCandidate->getAttribute('readability')) {
-                $topCandidate = $candidates[$c];
+                if (! $topCandidate || $readability->value > (int) $topCandidate->getAttribute('readability')) {
+                    $topCandidate = $candidates[$c];
+                }
             }
         }
 
         if ($topCandidate === null || mb_strtoupper($topCandidate->tagName) === 'BODY') {
-            $topCandidate = $this->dom->createElement('div');
+            $topCandidate = $this->dom !== null ? $this->dom->createElement('div') : new DOMElement('div');
             if ($page instanceof DOMDocument) {
                 if (isset($page->documentElement)) {
-                    $topCandidate->innerHTML = $page->documentElement->innerHTML;
-                    $page->documentElement->innerHTML = '';
+                    $this->setInnerHtml($topCandidate, $this->getInnerHtml($page->documentElement));
+                    $this->setInnerHtml($page->documentElement, '');
                     $page->documentElement->appendChild($topCandidate);
                 }
             } else {
-                $topCandidate->innerHTML = $page->innerHTML;
-                $page->innerHTML = '';
+                $this->setInnerHtml($topCandidate, $this->getInnerHtml($page));
+                $this->setInnerHtml($page, '');
                 $page->appendChild($topCandidate);
             }
             $this->initializeNode($topCandidate);
         }
 
+        if ($this->dom === null) {
+            return false;
+        }
+
         $articleContent = $this->dom->createElement('div');
         $articleContent->setAttribute('id', 'readability-content');
         $siblingScoreThreshold = max(10, ((int) $topCandidate->getAttribute('readability')) * 0.2);
-        if (isset($topCandidate->parentNode)) {
+        $siblingNodes = null;
+        if ($topCandidate->parentNode !== null) {
             $siblingNodes = $topCandidate->parentNode->childNodes;
         }
-        if (! isset($siblingNodes)) {
+        if (! $siblingNodes instanceof DOMNodeList) {
             $siblingNodes = new stdClass;
             $siblingNodes->length = 0;
         }
 
         for ($s = 0, $sl = $siblingNodes->length; $s < $sl; $s++) {
+            if (! $siblingNodes instanceof DOMNodeList) {
+                continue;
+            }
             $siblingNode = $siblingNodes->item($s);
+            if (! $siblingNode instanceof DOMNode) {
+                continue;
+            }
             $append = false;
 
-            $this->dbg('Looking at sibling node: '.$siblingNode->nodeName.(($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode->hasAttribute('readability')) ? (' with score '.$siblingNode->getAttribute('readability')) : ''));
+            $this->dbg('Looking at sibling node: '.$siblingNode->nodeName.(($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode instanceof DOMElement && $siblingNode->hasAttribute('readability')) ? (' with score '.$siblingNode->getAttribute('readability')) : ''));
 
             if ($siblingNode === $topCandidate) {
                 $append = true;
             }
 
             $contentBonus = 0;
-            if ($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode->getAttribute('class') === $topCandidate->getAttribute('class') && $topCandidate->getAttribute('class') !== '') {
+            if ($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode instanceof DOMElement && $siblingNode->getAttribute('class') === $topCandidate->getAttribute('class') && $topCandidate->getAttribute('class') !== '') {
                 $contentBonus += ((int) $topCandidate->getAttribute('readability')) * 0.2;
             }
 
-            if ($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode->hasAttribute('readability') && (((int) $siblingNode->getAttribute('readability')) + $contentBonus) >= $siblingScoreThreshold) {
+            if ($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode instanceof DOMElement && $siblingNode->hasAttribute('readability') && (((int) $siblingNode->getAttribute('readability')) + $contentBonus) >= $siblingScoreThreshold) {
                 $append = true;
             }
 
-            if (mb_strtoupper($siblingNode->nodeName) === 'P') {
+            if ($siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode instanceof DOMElement && mb_strtoupper($siblingNode->nodeName) === 'P') {
                 $linkDensity = $this->getLinkDensity($siblingNode);
                 $nodeContent = $this->getInnerText($siblingNode);
                 $nodeLength = mb_strlen($nodeContent);
 
                 if ($nodeLength > 80 && $linkDensity < 0.25) {
                     $append = true;
-                } elseif ($nodeLength < 80 && $linkDensity === 0 && preg_match('/\.( |$)/', $nodeContent)) {
+                } elseif ($nodeLength < 80 && $linkDensity == 0 && preg_match('/\.( |$)/', $nodeContent)) {
                     $append = true;
                 }
             }
@@ -943,13 +1060,18 @@ class Readability
                 $this->dbg('Appending node: '.$siblingNode->nodeName);
 
                 $nodeToAppend = null;
-                $sibNodeName = mb_strtoupper($siblingNode->nodeName);
+                $sibNodeName = $siblingNode->nodeType === XML_ELEMENT_NODE && $siblingNode instanceof DOMElement ? mb_strtoupper($siblingNode->nodeName) : '';
                 if ($sibNodeName !== 'DIV' && $sibNodeName !== 'P') {
                     $this->dbg('Altering siblingNode of '.$sibNodeName.' to div.');
+                    if ($this->dom === null) {
+                        continue;
+                    }
                     $nodeToAppend = $this->dom->createElement('div');
                     try {
-                        $nodeToAppend->setAttribute('id', $siblingNode->getAttribute('id'));
-                        $nodeToAppend->innerHTML = $siblingNode->innerHTML;
+                        if ($siblingNode instanceof DOMElement) {
+                            $nodeToAppend->setAttribute('id', $siblingNode->getAttribute('id'));
+                            $this->setInnerHtml($nodeToAppend, $this->getInnerHtml($siblingNode));
+                        }
                     } catch (Exception $e) {
                         $this->dbg('Could not alter siblingNode to div, reverting back to original.');
                         $nodeToAppend = $siblingNode;
@@ -963,7 +1085,6 @@ class Readability
                 }
 
                 $nodeToAppend->removeAttribute('class');
-
                 $articleContent->appendChild($nodeToAppend);
             }
         }
@@ -971,10 +1092,15 @@ class Readability
         $this->prepArticle($articleContent);
 
         if (mb_strlen($this->getInnerText($articleContent, false)) < 250) {
-            if (! isset($this->body->childNodes)) {
+            if ($this->body === null || ! isset($this->body->childNodes)) {
+                if ($this->dom === null) {
+                    return false;
+                }
                 $this->body = $this->dom->createElement('body');
             }
-            $this->body->innerHTML = $this->bodyCache;
+            if ($this->bodyCache !== null) {
+                $this->setInnerHtml($this->body, $this->bodyCache);
+            }
 
             if ($this->flagIsActive(self::FLAG_STRIP_UNLIKELYS)) {
                 $this->removeFlag(self::FLAG_STRIP_UNLIKELYS);
@@ -996,5 +1122,36 @@ class Readability
         }
 
         return $articleContent;
+    }
+
+    /**
+     * Get innerHTML of a DOMElement, working with JSLikeHTMLElement.
+     */
+    protected function getInnerHtml(DOMElement $node): string
+    {
+        if ($node instanceof JSLikeHTMLElement) {
+            return (string) $node->__get('innerHTML');
+        }
+
+        if ($node->ownerDocument !== null) {
+            $html = '';
+            foreach ($node->childNodes as $child) {
+                $html .= $node->ownerDocument->saveXML($child);
+            }
+
+            return $html;
+        }
+
+        return '';
+    }
+
+    /**
+     * Set innerHTML of a DOMElement, working with JSLikeHTMLElement.
+     */
+    protected function setInnerHtml(DOMElement $node, string $html): void
+    {
+        if ($node instanceof JSLikeHTMLElement) {
+            $node->__set('innerHTML', $html);
+        }
     }
 }

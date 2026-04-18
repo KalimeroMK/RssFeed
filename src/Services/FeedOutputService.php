@@ -286,7 +286,11 @@ class FeedOutputService
      */
     private function getMimeType(string $url): string
     {
-        $extension = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
+        $path = parse_url($url, PHP_URL_PATH);
+        if (! is_string($path)) {
+            $path = '';
+        }
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
         $types = [
             'jpg' => 'image/jpeg',
@@ -305,7 +309,7 @@ class FeedOutputService
     /**
      * Format date for RSS
      */
-    private function formatRssDate($date): string
+    private function formatRssDate(int|string|DateTime|DateTimeImmutable|null $date): string
     {
         if ($date === null) {
             return date('r');
@@ -330,7 +334,7 @@ class FeedOutputService
     /**
      * Format date for Atom
      */
-    private function formatAtomDate($date): string
+    private function formatAtomDate(int|string|DateTime|DateTimeImmutable|null $date): string
     {
         if ($date === null) {
             return date('c');
@@ -355,7 +359,7 @@ class FeedOutputService
     /**
      * Format date for JSON
      */
-    private function formatJsonDate($date): ?string
+    private function formatJsonDate(int|string|DateTime|DateTimeImmutable|null $date): ?string
     {
         if ($date === null) {
             return date('c');
