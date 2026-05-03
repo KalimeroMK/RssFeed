@@ -113,8 +113,11 @@ class RssfeedServiceProvider extends ServiceProvider
             return new MultiPageHandler($app->make(UrlResolver::class));
         });
 
-        $this->app->singleton(SinglePageHandler::class, function () {
-            return new SinglePageHandler;
+        $this->app->singleton(SinglePageHandler::class, function ($app) {
+            return new SinglePageHandler(
+                $app->make(ContentFetcherService::class),
+                $app->make(UrlResolver::class)
+            );
         });
 
         // Main RssFeed class

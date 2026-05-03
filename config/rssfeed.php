@@ -114,6 +114,40 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | HTTP Response Caching
+    |--------------------------------------------------------------------------
+    |
+    | Cache fetched HTML content to reduce redundant HTTP requests.
+    | Set to 0 to disable caching of individual HTTP responses.
+    |
+    */
+    'http_cache_time' => 0, // minutes (0 = disabled)
+
+    /*
+    |--------------------------------------------------------------------------
+    | Rate Limiting
+    |--------------------------------------------------------------------------
+    |
+    | Minimum delay in milliseconds between consecutive HTTP requests.
+    | Set to 0 to disable rate limiting.
+    |
+    */
+    'http_rate_limit_ms' => 500, // milliseconds between requests
+
+    /*
+    |--------------------------------------------------------------------------
+    | User-Agent Rotation
+    |--------------------------------------------------------------------------
+    |
+    | Rotate user agents to avoid detection. Set rotate_user_agent to false
+    | to use a fixed user_agent string.
+    |
+    */
+    'rotate_user_agent' => true,
+    'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+
+    /*
+    |--------------------------------------------------------------------------
     | Content Extraction Settings
     |--------------------------------------------------------------------------
     |

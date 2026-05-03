@@ -373,9 +373,11 @@ class RssFeed
         $feed->handle_content_type();
 
         $parsedItems = [];
+        $urlsToFetch = [];
+        $fetchMap = [];
 
         $items = $feed->get_items();
-        foreach ($items as $item) {
+        foreach ($items as $index => $item) {
             $title = (string) $item->get_title();
             $description = (string) $item->get_description();
             $permalink = (string) $feed->get_permalink();
@@ -389,13 +391,12 @@ class RssFeed
             $enclosure = $item->get_enclosure();
             $images = $this->extractImagesFromItem($item);
 
-            if ($content === $description || strlen(strip_tags($content)) < 200) {
-                if (is_string($link)) {
-                    $content = $this->fetchFullContentFromPost($link);
-                }
+            if (($content === $description || strlen(strip_tags($content)) < 200) && is_string($link)) {
+                $urlsToFetch[] = $link;
+                $fetchMap[$index] = $link;
             }
 
-            $parsedItems[] = [
+            $parsedItems[$index] = [
                 'title' => $title,
                 'description' => $description,
                 'permalink' => $permalink,
@@ -412,7 +413,18 @@ class RssFeed
             ];
         }
 
-        return $parsedItems;
+        if ($urlsToFetch !== []) {
+            $fetcher = $this->app->make(ContentFetcherService::class);
+            $fetchedContents = $fetcher->fetchFullContentBatch($urlsToFetch);
+
+            foreach ($fetchMap as $index => $link) {
+                if (isset($fetchedContents[$link])) {
+                    $parsedItems[$index]['content'] = $fetchedContents[$link];
+                }
+            }
+        }
+
+        return array_values($parsedItems);
     }
 
     /**
