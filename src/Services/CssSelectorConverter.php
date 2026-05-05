@@ -64,7 +64,7 @@ class CssSelectorConverter
                 throw new \InvalidArgumentException('Empty class in CSS selector');
             }
 
-            return "//*[contains(@class, '".$this->escapeValue($class)."')]";
+            return "//*[contains(concat(' ', normalize-space(@class), ' '), ' ".$this->escapeValue($class)." ')]";
         }
 
         // Handle tag.class
@@ -74,7 +74,7 @@ class CssSelectorConverter
                 throw new \InvalidArgumentException('Invalid tag.class selector');
             }
 
-            return '//'.$this->escapeName($tag)."[contains(@class, '".$this->escapeValue($class)."')]";
+            return '//'.$this->escapeName($tag)."[contains(concat(' ', normalize-space(@class), ' '), ' ".$this->escapeValue($class)." ')]";
         }
 
         // Handle tag#id

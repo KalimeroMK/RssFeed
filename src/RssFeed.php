@@ -420,6 +420,15 @@ class RssFeed
             foreach ($fetchMap as $index => $link) {
                 if (isset($fetchedContents[$link])) {
                     $parsedItems[$index]['content'] = $fetchedContents[$link];
+
+                    // Re-extract images from full content if RSS had none
+                    if (empty($parsedItems[$index]['images'])) {
+                        $reExtracted = $this->extractImageFromDescription($fetchedContents[$link], $link);
+                        if ($reExtracted) {
+                            $parsedItems[$index]['images'] = [$reExtracted];
+                            $parsedItems[$index]['image'] = $reExtracted;
+                        }
+                    }
                 }
             }
         }
