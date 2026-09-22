@@ -9,7 +9,6 @@ use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
@@ -207,7 +206,8 @@ class RssFeed
     {
         $path = trim((string) config('rssfeed.image_storage_path', 'images'), '/');
 
-        return Storage::disk(config('rssfeed.spatie_disk', 'public'))->url($path.'/'.$imageName);
+        // Relative URL: survives domain changes and works behind any proxy.
+        return '/storage/'.$path.'/'.$imageName;
     }
 
     /**
