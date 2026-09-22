@@ -101,6 +101,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Content Image Localization
+    |--------------------------------------------------------------------------
+    |
+    | URLs containing any of these patterns are never downloaded by
+    | localizeContentImages() (trackers, emoticons, avatars, ...).
+    |
+    */
+    'localize_skip_patterns' => ['s.w.org', 'gravatar.com', 'emoji', '/avatar'],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP Client Options
     |--------------------------------------------------------------------------
     |

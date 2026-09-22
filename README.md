@@ -155,6 +155,11 @@ $images = RssFeed::extractImagesFromItem($item);
 
 // Save images to storage
 $savedImages = RssFeed::saveImagesToStorage($images, $model);
+
+// Download every content image and rewrite the HTML to local URLs.
+// Skips already-local images, data URIs and the configured
+// `rssfeed.localize_skip_patterns` (emoji, gravatar, ...).
+$html = RssFeed::localizeContentImages($item['content'], $item['link']);
 ```
 
 ### HTML Sanitization

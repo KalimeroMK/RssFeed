@@ -9,6 +9,7 @@ use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Kalimeromk\Rssfeed\Exceptions\CantOpenFileFromUrlException;
 use Kalimeromk\Rssfeed\Helpers\UrlUploadedFile;
@@ -68,41 +69,145 @@ class RssFeed
     public function saveImagesToStorage(array $images, ?object $model = null): array
     {
         $savedImageNames = [];
-        $imageStoragePath = config('rssfeed.image_storage_path', 'images');
-        $spatieEnabled = config('rssfeed.spatie_enabled', false);
-        $spatieDisk = config('rssfeed.spatie_disk', 'public');
-        $spatieMediaType = config('rssfeed.spatie_media_type', 'image');
 
         foreach ($images as $image) {
-            if (! is_string($image) || empty($image)) {
-                continue;
-            }
-
-            try {
-                $file = UrlUploadedFile::createFromUrl($image);
-                $extension = $file->extension();
-
-                if (empty($extension)) {
-                    $extension = $this->inferExtension($image, (string) $file->getMimeType());
-                }
-
-                $imageName = Str::random(15).'.'.$extension;
-
-                if ($spatieEnabled && $model && \method_exists($model, 'addMediaFromUrl')) {
-                    $model->addMediaFromUrl($image)
-                        ->toMediaCollection($spatieMediaType, $spatieDisk);
-                } else {
-                    $file->storeAs($imageStoragePath, $imageName, $spatieDisk);
-                }
-                $savedImageNames[] = $imageName;
-            } catch (Exception $e) {
-                Log::error('Error processing image URL: '.$image, ['exception' => $e]);
-
-                continue;
+            $name = $this->saveImageToStorage($image, $model);
+            if ($name !== null) {
+                $savedImageNames[] = $name;
             }
         }
 
         return $savedImageNames;
+    }
+
+    /**
+     * Downloads a single image and saves it to storage.
+     *
+     * @return string|null The generated image name, or null on failure.
+     */
+    public function saveImageToStorage(mixed $image, ?object $model = null): ?string
+    {
+        if (! is_string($image) || $image === '') {
+            return null;
+        }
+
+        $imageStoragePath = config('rssfeed.image_storage_path', 'images');
+        $spatieEnabled = config('rssfeed.spatie_enabled', false);
+
+        try {
+            $file = UrlUploadedFile::createFromUrl($image);
+            $extension = $file->extension();
+
+            if (empty($extension)) {
+                $extension = $this->inferExtension($image, (string) $file->getMimeType());
+            }
+
+            $imageName = Str::random(15).'.'.$extension;
+
+            if ($spatieEnabled && $model && \method_exists($model, 'addMediaFromUrl')) {
+                $model->addMediaFromUrl($image)
+                    ->toMediaCollection(config('rssfeed.spatie_media_type', 'image'), config('rssfeed.spatie_disk', 'public'));
+            } else {
+                $file->storeAs($imageStoragePath, $imageName, config('rssfeed.spatie_disk', 'public'));
+            }
+
+            return $imageName;
+        } catch (Exception $e) {
+            Log::error('Error processing image URL: '.$image, ['exception' => $e]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Downloads every content image referenced in the given HTML and rewrites
+     * the URLs (img src/srcset and wrapping anchor href) to the local storage
+     * URLs. Images that are already local, data URIs, or match the configured
+     * skip patterns are left untouched.
+     */
+    public function localizeContentImages(string $html, ?string $baseUrl = null): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+
+        $resolver = $this->app->make(UrlResolver::class);
+        $skipPatterns = (array) config('rssfeed.localize_skip_patterns', [
+            's.w.org', 'gravatar.com', 'emoji', '/avatar',
+        ]);
+
+        $urls = [];
+
+        if (preg_match_all('/<img\b[^>]*>/i', $html, $imgTags)) {
+            foreach ($imgTags[0] as $tag) {
+                $attrs = $this->parseTagAttributes($tag);
+                $candidate = $this->parseSrcset($attrs['srcset'] ?? ($attrs['data-srcset'] ?? null))
+                    ?: ($attrs['src'] ?? ($attrs['data-src'] ?? ($attrs['data-original'] ?? null)));
+                $url = (string) $resolver->resolveUrl((string) $candidate, $baseUrl);
+                if ($this->shouldLocalizeImage($url, $skipPatterns)) {
+                    $urls[$url] = true;
+                }
+            }
+        }
+
+        // Anchors wrapping an image usually link to the full-size version.
+        if (preg_match_all('/<a\b[^>]*>\s*<img\b/i', $html, $aTags)) {
+            foreach ($aTags[0] as $tag) {
+                $attrs = $this->parseTagAttributes($tag);
+                $href = (string) $resolver->resolveUrl((string) ($attrs['href'] ?? ''), $baseUrl);
+                $path = (string) parse_url($href, PHP_URL_PATH);
+                if ($this->shouldLocalizeImage($href, $skipPatterns)
+                    && preg_match('/\.(jpe?g|png|gif|webp|avif)$/i', $path)) {
+                    $urls[$href] = true;
+                }
+            }
+        }
+
+        // Longest first so a URL that is a prefix of another cannot corrupt it.
+        $remoteUrls = array_keys($urls);
+        usort($remoteUrls, static fn ($a, $b) => strlen($b) <=> strlen($a));
+
+        foreach ($remoteUrls as $remoteUrl) {
+            $name = $this->saveImageToStorage($remoteUrl);
+            if ($name === null) {
+                continue;
+            }
+
+            $localUrl = $this->publicImageUrl($name);
+            $html = str_replace($remoteUrl, $localUrl, $html);
+            $html = str_replace(htmlspecialchars($remoteUrl, ENT_QUOTES), $localUrl, $html);
+        }
+
+        return $html;
+    }
+
+    private function shouldLocalizeImage(string $url, array $skipPatterns): bool
+    {
+        if ($url === '' || str_starts_with($url, '/') || str_starts_with($url, 'data:')) {
+            return false;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        $appHost = parse_url((string) config('app.url', ''), PHP_URL_HOST);
+        if ($host && $appHost && strcasecmp((string) $host, (string) $appHost) === 0) {
+            return false;
+        }
+
+        $lower = mb_strtolower($url);
+        foreach ($skipPatterns as $pattern) {
+            if ($pattern !== '' && str_contains($lower, mb_strtolower((string) $pattern))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function publicImageUrl(string $imageName): string
+    {
+        $path = trim((string) config('rssfeed.image_storage_path', 'images'), '/');
+
+        return Storage::disk(config('rssfeed.spatie_disk', 'public'))->url($path.'/'.$imageName);
     }
 
     /**

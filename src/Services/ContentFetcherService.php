@@ -121,18 +121,18 @@ class ContentFetcherService
             $responses = Http::pool(function ($pool) use ($urlsToFetch, $headers, $verify, $timeout, $retryTimes, $retrySleep) {
                 foreach ($urlsToFetch as $url) {
                     $pool
+                        ->as($url)
                         ->retry($retryTimes, $retrySleep)
                         ->timeout($timeout)
                         ->withOptions(['verify' => $verify])
                         ->withHeaders($headers)
-                        ->as($url)
                         ->get($url);
                 }
             });
 
             foreach ($urlsToFetch as $url) {
                 $response = $responses[$url] ?? null;
-                if ($response === null || ! method_exists($response, 'successful') || ! $response->successful()) {
+                if (! $response instanceof \Illuminate\Http\Client\Response || ! $response->successful()) {
                     $results[$url] = null;
                     continue;
                 }

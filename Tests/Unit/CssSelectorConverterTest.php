@@ -20,7 +20,7 @@ class CssSelectorConverterTest extends TestCase
     /** @test */
     public function it_converts_class_selector(): void
     {
-        $this->assertEquals("//*[contains(@class, 'donation-form')]", $this->converter->toXPath('.donation-form'));
+        $this->assertEquals("//*[contains(concat(' ', normalize-space(@class), ' '), ' donation-form ')]", $this->converter->toXPath('.donation-form'));
     }
 
     /** @test */
@@ -38,7 +38,7 @@ class CssSelectorConverterTest extends TestCase
     /** @test */
     public function it_converts_tag_class_selector(): void
     {
-        $this->assertEquals("//div[contains(@class, 'content')]", $this->converter->toXPath('div.content'));
+        $this->assertEquals("//div[contains(concat(' ', normalize-space(@class), ' '), ' content ')]", $this->converter->toXPath('div.content'));
     }
 
     /** @test */

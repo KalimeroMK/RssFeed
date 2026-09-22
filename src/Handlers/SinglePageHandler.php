@@ -135,10 +135,6 @@ class SinglePageHandler
         $links = $dom->getElementsByTagName('a');
 
         foreach ($links as $link) {
-            if (! $link instanceof \DOMElement) {
-                continue;
-            }
-
             $href = $link->getAttribute('href');
             $text = strtolower(trim($link->textContent));
             $title = strtolower(trim($link->getAttribute('title')));
